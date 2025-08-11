@@ -1,39 +1,39 @@
 # main.py
-import cv2, time
-from config import *
+import cv2
+from config import WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING
 from state import GameState
 from geometry import grid_anchor, tile_at
 from hand_tracking import HandTracker
-from renderer import draw_start, draw_tiles, draw_game_ui, draw_cursor
-from game import new_model, start_game, restart, update_state, handle_right_pinch, generate_pattern
+from renderer import draw_start, draw_tiles, draw_game_ui, draw_cursor, show_debug_window
+from game import (
+    new_model, start_game, restart, update_state, generate_pattern,
+    start_pinch, end_pinch
+)
 
 def main():
-    cap = cv2.VideoCapture(0)
-    cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)  # for Windows compatibility
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # more reliable on Windows
     if not cap.isOpened():
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(0)  # fallback
 
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(1, cv2.CAP_DSHOW) #second camera if available
-
-
-
-    ow = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-    oh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
-
+    # Prepare layout
     start_x, start_y = grid_anchor(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
     model = new_model(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING, start_x, start_y)
-
     tracker = HandTracker(WINDOW_W, WINDOW_H)
-    print("Controls: Dual-pinch to start • R restart • D debug • Q quit")
+
+    # Consistent window
+    cv2.namedWindow("Memory Tiles", cv2.WINDOW_GUI_NORMAL)
+    print("Controls: Dual-pinch start • Right pinch select • D debug • R restart • Q quit")
 
     while True:
         ok, frame = cap.read()
-        if not ok: break
+        if not ok:
+            break
+
         frame = cv2.flip(frame, 1)
         frame = cv2.resize(frame, (WINDOW_W, WINDOW_H))
 
         res = tracker.process(frame)
+
         # reset per-frame flags
         model.hands.left_pinching = False
         model.hands.right_pinching = False
@@ -44,21 +44,31 @@ def main():
             for lm, handed in zip(res.multi_hand_landmarks, res.multi_handedness):
                 label = handed.classification[0].label  # "Left"/"Right"
                 tracker.draw.draw_landmarks(frame, lm, tracker.mp_hands.HAND_CONNECTIONS)
-                pinch, (cx,cy), thumb, index, lbl = tracker.detect_pinch(lm.landmark, label)
+                pinch, (cx, cy), thumb, index, lbl = tracker.detect_pinch(lm.landmark, label)
 
                 if lbl == "Left":
                     model.hands.left_pinching = pinch
                 else:
+                    # Right hand
+                    prev = model.cursor.was_pinching
                     model.hands.right_pinching = pinch
                     right_pinching = pinch
-                    model.cursor.cursor, model.cursor.thumb, model.cursor.index = (cx,cy), thumb, index
+                    model.cursor.cursor, model.cursor.thumb, model.cursor.index = (cx, cy), thumb, index
 
-                    if pinch and not model.cursor.was_pinching:
-                        handle_right_pinch(model, cx, cy,
-                            lambda x,y: tile_at(x, y, model.grid, model.start_x, model.start_y, model.tile_size, model.spacing))
+                    # Edge-detect pinch state
+                    if pinch and not prev:
+                        # Pinch START — lock the tile under cursor (may be -1)
+                        start_pinch(
+                            model,
+                            tile_at(cx, cy, model.grid, model.start_x, model.start_y, model.tile_size, model.spacing)
+                        )
+                    elif not pinch and prev:
+                        # Pinch END — commit the armed tile exactly once
+                        end_pinch(model)
+
                     model.cursor.was_pinching = pinch
 
-        # check dual pinch to start
+        # dual-pinch to start
         if tracker.update_dual_pinch(model):
             start_game(model)
 
@@ -71,20 +81,29 @@ def main():
             draw_game_ui(frame, model)
             draw_cursor(frame, model, right_pinching)
 
+        # show main window
         cv2.imshow("Memory Tiles", frame)
-        k = cv2.waitKey(1) & 0xFF
-        if k == ord('q'): break
-        elif k == ord('r'): restart(model)
-        elif k == ord('d'): model.show_debug = not model.show_debug
+
+        # Debug window toggle
+        if model.show_debug:
+            show_debug_window(model)
+        else:
+            try:
+                cv2.destroyWindow("Debug")
+            except cv2.error:
+                pass
+
+        # input
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord('r'):
+            restart(model)
+        elif key == ord('d'):
+            model.show_debug = not model.show_debug
 
     cap.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    try:
-        import mediapipe, numpy
-    except ImportError as e:
-        print(f"Missing library: {e}")
-        print("pip install opencv-python mediapipe numpy")
-        raise
     main()

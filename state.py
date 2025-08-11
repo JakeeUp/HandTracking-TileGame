@@ -19,14 +19,13 @@ class HandFlags:
 
 @dataclass
 class CursorInfo:
-    cursor: Optional[Tuple[int,int]] = None
-    thumb: Optional[Tuple[int,int]] = None
-    index: Optional[Tuple[int,int]] = None
+    cursor: Optional[Tuple[int, int]] = None
+    thumb: Optional[Tuple[int, int]] = None
+    index: Optional[Tuple[int, int]] = None
     was_pinching: bool = False
 
 @dataclass
 class GameModel:
-    # layout
     win_w: int
     win_h: int
     grid: int
@@ -35,7 +34,6 @@ class GameModel:
     start_x: int
     start_y: int
 
-    # progression
     state: GameState = GameState.START_SCREEN
     level: int = 1
     pattern: List[int] = field(default_factory=list)
@@ -43,10 +41,10 @@ class GameModel:
     show_idx: int = 0
     last_mark: float = field(default_factory=time.time)
 
-    # input flags
     hands: HandFlags = field(default_factory=HandFlags)
     cursor: CursorInfo = field(default_factory=CursorInfo)
 
-    # misc
     pinch_cooldown: float = 0.0
     show_debug: bool = False
+
+    armed_tile: int = -1
