@@ -9,6 +9,15 @@ from game import new_model, start_game, restart, update_state, handle_right_pinc
 
 def main():
     cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)  # for Windows compatibility
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(1, cv2.CAP_DSHOW) #second camera if available
+
+
+
     ow = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
     oh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
 
