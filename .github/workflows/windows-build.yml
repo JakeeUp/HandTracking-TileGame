@@ -1,52 +1,72 @@
-name: Build & Release EXE (Windows)
+name: Build & Release (Win + Mac)
 
 on:
   push:
-    tags: ["v*"]      # runs when you push a tag like v1.0.3
-  workflow_dispatch: {}  # lets you run it manually
+    tags: ["v*"]      # runs on tags like v1.0.4
+  workflow_dispatch: {}
 
-# needed so the workflow can create a Release
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            id: win
+            py: "3.11"
+            build: pyinstaller --onefile --name MemoryTiles --collect-all mediapipe main.py
+            artifact: dist/MemoryTiles.exe
+          - os: macos-14   # Apple Silicon (arm64)
+            id: mac-arm
+            py: "3.11"
+            build: pyinstaller --onefile --windowed --name MemoryTiles main.py
+            artifact: dist/MemoryTiles.app
+          - os: macos-13   # Intel (x86_64)
+            id: mac-intel
+            py: "3.11"
+            build: pyinstaller --onefile --windowed --name MemoryTiles main.py
+            artifact: dist/MemoryTiles.app
+
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.py }}
 
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - name: Build exe
+      - name: Build
+        run: ${{ matrix.build }}
+
+      - name: Zip mac app
+        if: startsWith(matrix.os, 'macos')
         run: |
-          pyinstaller --onefile --name MemoryTiles --collect-all mediapipe main.py
+          cd dist && zip -r MemoryTiles-${{ matrix.id }}.zip MemoryTiles.app
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MemoryTiles
-          path: dist/MemoryTiles.exe
+          name: MemoryTiles-${{ matrix.id }}
+          path: ${{ startsWith(matrix.os, 'macos') && format('dist/MemoryTiles-{0}.zip', matrix.id) || matrix.artifact }}
+
 
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download built exe
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: MemoryTiles
-          path: .
+          path: ./artifacts
 
-      - name: Create GitHub Release and upload EXE
+      - name: Create Release and attach files
         uses: softprops/action-gh-release@v2
         with:
-          files: MemoryTiles.exe
-          # uncomment to mark as prerelease
-          # prerelease: true
+          files: |
+            artifacts/**/MemoryTiles.exe
+            artifacts/**/MemoryTiles-*.zip
