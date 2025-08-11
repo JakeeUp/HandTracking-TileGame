@@ -1,9 +1,13 @@
-name: Build EXE (Windows)
+name: Build & Release EXE (Windows)
 
 on:
   push:
-    tags: ["v*"]  # runs when you push a tag like v1.0.0
-  workflow_dispatch: {}  # lets you run it manually from Actions tab
+    tags: ["v*"]      # runs when you push a tag like v1.0.3
+  workflow_dispatch: {}  # lets you run it manually
+
+# needed so the workflow can create a Release
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -29,3 +33,20 @@ jobs:
         with:
           name: MemoryTiles
           path: dist/MemoryTiles.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built exe
+        uses: actions/download-artifact@v4
+        with:
+          name: MemoryTiles
+          path: .
+
+      - name: Create GitHub Release and upload EXE
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MemoryTiles.exe
+          # uncomment to mark as prerelease
+          # prerelease: true
