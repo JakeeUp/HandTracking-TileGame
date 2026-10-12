@@ -12,6 +12,7 @@ from .game import Game, GameState
 from .geometry import Layout
 from .gestures import Gestures
 from .hand_tracking import HandTracker
+from .scores import load_best, save_best
 from .renderer import (
     draw_cursor, draw_game_ui, draw_message, draw_start, draw_tiles, show_debug_window,
 )
@@ -92,7 +93,8 @@ def main():
 def run(cap, tracker):
     """Game loop. Returns an error message, or None when the player quits."""
     layout = Layout.centered(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
-    game = Game(tile_count=layout.tile_count)
+    game = Game(tile_count=layout.tile_count, best=load_best())
+    saved_best = game.best
     gestures = Gestures()
     show_debug = False
     fullscreen = False
@@ -135,6 +137,9 @@ def run(cap, tracker):
             draw_tiles(frame, game, layout, now)
             draw_game_ui(frame, game, layout)
             draw_cursor(frame, inp.cursor, inp.right_pinching)
+        if game.best > saved_best:
+            save_best(game.best)
+            saved_best = game.best
 
         cv2.imshow(WINDOW, frame)
         if show_debug:

@@ -24,7 +24,7 @@ def test_start_screen(prog):
 def test_game_screens(state):
     game = Game(tile_count=LAYOUT.tile_count)
     game.start(0.0)
-    game.pattern, game.player_input, game.state = [0, 5, 5], [0, 6], state
+    game.pattern, game.player_input, game.state = [0, 5, 10], [0, 6], state
     frame = blank()
     renderer.draw_tiles(frame, game, LAYOUT, 0.0)
     renderer.draw_game_ui(frame, game, LAYOUT)

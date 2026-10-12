@@ -3,12 +3,12 @@ import random
 import pytest
 
 from memory_tiles.config import (
-    DUAL_PINCH_HOLD_S, FEEDBACK_DURATION, PATTERN_PAUSE, PINCH_COOLDOWN_S,
-    TILE_SHOW_DURATION,
+    DUAL_PINCH_HOLD_S, FAIL_DURATION, LIVES, MIN_TILE_SHOW_DURATION, PINCH_COOLDOWN_S,
+    READY_DURATION, SUCCESS_DURATION, TILE_SHOW_DURATION,
 )
 from memory_tiles.game import Game, GameState
 
-STEP = TILE_SHOW_DURATION + PATTERN_PAUSE
+EPS = 1e-6  # absorbs float drift when summing step durations
 
 
 @pytest.fixture
@@ -17,9 +17,12 @@ def game():
 
 
 def play_pattern(game, now):
-    """Advance through SHOWING_PATTERN and return the time input starts."""
+    """Advance through READY and SHOWING_PATTERN; return the time input starts."""
+    assert game.state is GameState.READY
+    now += READY_DURATION + EPS
+    game.update(now)
     for _ in game.pattern:
-        now += STEP
+        now += game.step_duration + EPS
         game.update(now)
     assert game.state is GameState.PLAYER_INPUT
     return now
@@ -37,13 +40,27 @@ def enter(game, tiles, now):
     return now
 
 
+def wrong_tile(game, i):
+    return (game.pattern[i] + 1) % game.tile_count
+
+
+def clear_level(game, now):
+    now = enter(game, game.pattern, play_pattern(game, now))
+    assert game.state is GameState.LEVEL_SUCCESS
+    now += SUCCESS_DURATION
+    game.update(now)
+    return now
+
+
+# --- starting ----------------------------------------------------------------
+
 def test_dual_pinch_requires_full_hold(game):
     game.update_dual_pinch(True, 0.0)
     game.update_dual_pinch(True, DUAL_PINCH_HOLD_S - 0.01)
     assert game.state is GameState.START_SCREEN
     assert 0.9 < game.dual_pinch_progress(DUAL_PINCH_HOLD_S - 0.01) < 1.0
     game.update_dual_pinch(True, DUAL_PINCH_HOLD_S)
-    assert game.state is GameState.SHOWING_PATTERN
+    assert game.state is GameState.READY
 
 
 def test_dual_pinch_resets_on_release(game):
@@ -55,37 +72,123 @@ def test_dual_pinch_resets_on_release(game):
     assert game.state is GameState.START_SCREEN
 
 
-def test_start_generates_level_one_pattern(game):
+def test_dual_pinch_ignored_mid_game(game):
     game.start(0.0)
+    pattern = list(game.pattern)
+    game.update_dual_pinch(True, 1.0)
+    game.update_dual_pinch(True, 1.0 + DUAL_PINCH_HOLD_S)
+    assert game.state is GameState.READY and game.pattern == pattern
+
+
+def test_start_resets_and_gives_one_tile(game):
+    game.score, game.lives = 9, 0
+    game.start(0.0)
+    assert game.state is GameState.READY
+    assert len(game.pattern) == 1 and 0 <= game.pattern[0] < 16
+    assert (game.level, game.lives, game.score) == (1, LIVES, 0)
+
+
+# --- showing the pattern -----------------------------------------------------
+
+def test_ready_beat_before_pattern(game):
+    game.start(0.0)
+    assert game.highlighted_tile(0.0) is None
+    game.update(READY_DURATION - 0.01)
+    assert game.state is GameState.READY
+    game.update(READY_DURATION)
     assert game.state is GameState.SHOWING_PATTERN
-    assert len(game.pattern) == 1
-    assert all(0 <= t < 16 for t in game.pattern)
 
 
 def test_pattern_tile_lit_then_paused(game):
     game.start(0.0)
-    assert game.highlighted_tile(0.0) == game.pattern[0]
-    assert game.highlighted_tile(TILE_SHOW_DURATION + 0.01) is None
+    game.update(READY_DURATION)
+    t = READY_DURATION
+    assert game.highlighted_tile(t) == game.pattern[0]
+    assert game.highlighted_tile(t + game.tile_show_duration + 0.01) is None
 
 
 def test_showing_pattern_advances_on_schedule(game):
     game.start(0.0)
-    game.update(STEP - 0.01)
+    game.update(READY_DURATION)
+    game.update(READY_DURATION + game.step_duration - 0.01)
     assert game.state is GameState.SHOWING_PATTERN
-    game.update(STEP)
+    game.update(READY_DURATION + game.step_duration)
     assert game.state is GameState.PLAYER_INPUT
 
 
-def test_correct_input_levels_up(game):
-    game.start(0.0)
-    now = enter(game, game.pattern, play_pattern(game, 0.0))
-    game.update(now)
-    assert game.state is GameState.LEVEL_SUCCESS
-    game.update(now + FEEDBACK_DURATION + 0.01)
-    assert game.level == 2
-    assert len(game.pattern) == 2
-    assert game.state is GameState.SHOWING_PATTERN
+def test_show_duration_speeds_up_with_floor(game):
+    assert game.tile_show_duration == TILE_SHOW_DURATION
+    game.level = 5
+    assert game.tile_show_duration < TILE_SHOW_DURATION
+    game.level = 500
+    assert game.tile_show_duration == MIN_TILE_SHOW_DURATION
 
+
+# --- progression -------------------------------------------------------------
+
+def test_success_extends_the_same_pattern(game):
+    game.start(0.0)
+    first = list(game.pattern)
+    clear_level(game, 0.0)
+    assert game.level == 2
+    assert game.pattern[:1] == first and len(game.pattern) == 2
+    assert game.state is GameState.READY
+
+
+def test_pattern_never_repeats_a_tile_back_to_back():
+    game = Game(tile_count=2, rng=random.Random(0))
+    game.start(0.0)
+    for _ in range(50):
+        game._extend_pattern()
+    assert all(a != b for a, b in zip(game.pattern, game.pattern[1:]))
+
+
+def test_score_and_best_track_cleared_length(game):
+    game.start(0.0)
+    now = clear_level(game, 0.0)
+    now = clear_level(game, now)
+    assert game.score == 2 and game.best == 2
+    game.start(now)
+    assert game.score == 0 and game.best == 2
+
+
+# --- failing -----------------------------------------------------------------
+
+def test_wrong_tile_fails_immediately(game):
+    game.start(0.0)
+    now = clear_level(game, 0.0)
+    now = play_pattern(game, now)
+    tap(game, wrong_tile(game, 0), now)         # first of two picks is wrong
+    assert game.state is GameState.LEVEL_FAILED
+    assert game.lives == LIVES - 1
+    assert game.first_mistake == 0
+
+
+def test_failing_replays_the_same_pattern(game):
+    game.start(0.0)
+    now = play_pattern(game, 0.0)
+    pattern = list(game.pattern)
+    tap(game, wrong_tile(game, 0), now)
+    game.update(now + FAIL_DURATION)
+    assert game.state is GameState.READY
+    assert game.pattern == pattern and game.player_input == []
+
+
+def test_losing_all_lives_is_game_over(game):
+    game.start(0.0)
+    now = 0.0
+    for _ in range(LIVES):
+        now = play_pattern(game, now) + PINCH_COOLDOWN_S
+        tap(game, wrong_tile(game, 0), now)
+        now += FAIL_DURATION
+        game.update(now)
+    assert game.state is GameState.GAME_OVER
+    game.update_dual_pinch(True, now)
+    game.update_dual_pinch(True, now + DUAL_PINCH_HOLD_S)
+    assert game.state is GameState.READY and game.lives == LIVES
+
+
+# --- input -------------------------------------------------------------------
 
 def test_input_ignored_outside_player_input(game):
     game.start(0.0)
@@ -95,9 +198,8 @@ def test_input_ignored_outside_player_input(game):
 
 def test_input_ignored_during_cooldown(game):
     game.start(0.0)
-    now = play_pattern(game, 0.0)
-    game.level = 3
     game.pattern = [1, 2, 3]
+    now = play_pattern(game, 0.0)
     tap(game, 1, now)
     tap(game, 2, now + PINCH_COOLDOWN_S / 2)
     assert game.player_input == [1]
@@ -113,22 +215,10 @@ def test_pinch_on_no_tile_commits_nothing(game):
     assert game.armed_tile is None
 
 
-def test_restart_clears_transient_state(game):
-    game.start(0.0)
-    now = play_pattern(game, 0.0)
-    game.pinch_started(5)
-    game.cooldown_until = now + 10
-    game.restart()
-    assert game.state is GameState.START_SCREEN
-    assert (game.level, game.pattern, game.player_input) == (1, [], [])
-    assert game.armed_tile is None
-    assert game.cooldown_until == 0.0
-
-
 def test_pinch_started_before_input_phase_is_not_committed(game):
     """The start gesture (or a pinch during the pattern) can't become an answer."""
     game.start(0.0)
-    game.pinch_started(game.pattern[0])        # still SHOWING_PATTERN
+    game.pinch_started(game.pattern[0])        # still READY
     now = play_pattern(game, 0.0)
     game.pinch_ended(now)
     assert game.player_input == []
@@ -141,3 +231,17 @@ def test_cancelled_pinch_commits_nothing(game):
     game.pinch_cancelled()
     game.pinch_ended(now)
     assert game.player_input == []
+
+
+def test_restart_clears_transient_state(game):
+    game.start(0.0)
+    now = play_pattern(game, 0.0)
+    game.pinch_started(5)
+    game.cooldown_until = now + 10
+    game.best = 7
+    game.restart()
+    assert game.state is GameState.START_SCREEN
+    assert (game.level, game.pattern, game.player_input) == (1, [], [])
+    assert (game.lives, game.score, game.best) == (LIVES, 0, 7)
+    assert game.armed_tile is None
+    assert game.cooldown_until == 0.0

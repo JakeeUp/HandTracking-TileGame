@@ -83,7 +83,7 @@ def draw_game_ui(frame, game, layout):
     draw_bg(frame, 0, 0, layout.win_w, 100)
     cv2.putText(frame, f"LEVEL {game.level}", (30, 50),
                 cv2.FONT_HERSHEY_DUPLEX, 1.5, CLR_TEXT, 3)
-    cv2.putText(frame, f"Pattern Length: {len(game.pattern)}", (30, 80),
+    cv2.putText(frame, f"Lives: {game.lives}   Score: {game.score}   Best: {game.best}", (30, 80),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
 
     # progress
@@ -106,7 +106,9 @@ def draw_game_ui(frame, game, layout):
         GameState.SHOWING_PATTERN: ("MEMORIZE THE PATTERN", (0, 255, 255)),
         GameState.PLAYER_INPUT: ("PINCH TILES IN THE CORRECT ORDER", (0, 255, 0)),
         GameState.LEVEL_SUCCESS: ("PERFECT! LEVEL COMPLETE!", (0, 255, 0)),
-        GameState.LEVEL_FAILED: ("WRONG PATTERN! TRY AGAIN", (0, 100, 255)),
+        GameState.LEVEL_FAILED: ("WRONG TILE! WATCH AGAIN", (0, 100, 255)),
+        GameState.READY: ("GET READY...", (0, 255, 255)),
+        GameState.GAME_OVER: ("GAME OVER - PINCH BOTH HANDS TO PLAY AGAIN", (0, 100, 255)),
     }
     if game.state in mapping:
         text, color = mapping[game.state]
