@@ -1,0 +1,9 @@
+[project]
+name = "memory-tiles"
+version = "1.1.0"
+description = "Webcam memory game controlled with hand pinches (OpenCV + MediaPipe)"
+requires-python = ">=3.9,<3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

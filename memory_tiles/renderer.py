@@ -1,40 +1,34 @@
 """OpenCV drawing for the game screens, HUD and debug window."""
 import cv2
-import time
 import numpy as np
 from .config import (
     CLR_DEFAULT, CLR_BORDER, CLR_HILITE, CLR_SELECTED,
     CLR_SUCCESS, CLR_FAIL, CLR_TEXT,
-    TILE_SHOW_DURATION
 )
-from .geometry import tile_xy
+from .game import GameState
 
 def draw_bg(frame, x, y, w, h, alpha=0.30):
     overlay = frame.copy()
     cv2.rectangle(overlay, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 0), -1)
     cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
-def draw_start(frame, model):
-    draw_bg(frame, 0, 0, model.win_w, model.win_h)
+def draw_start(frame, layout, prog):
+    """Title screen; `prog` is the 0..1 dual-pinch hold progress."""
+    draw_bg(frame, 0, 0, layout.win_w, layout.win_h)
     # Title
     title = "MEMORY TILES"
     size, _ = cv2.getTextSize(title, cv2.FONT_HERSHEY_DUPLEX, 3.0, 4)
-    cv2.putText(frame, title, ((model.win_w - size[0]) // 2, 200),
+    cv2.putText(frame, title, ((layout.win_w - size[0]) // 2, 200),
                 cv2.FONT_HERSHEY_DUPLEX, 3.0, (0, 255, 255), 4)
-
-    # Progress
-    prog = 0.0
-    if model.hands.both_start_time:
-        prog = min(1.0, (time.time() - model.hands.both_start_time) / 1.0)
 
     txt = "PINCH WITH BOTH HANDS TO START" + (f"… {int(prog * 100)}%" if prog > 0 else "")
     size, _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
-    cv2.putText(frame, txt, ((model.win_w - size[0]) // 2, 400),
+    cv2.putText(frame, txt, ((layout.win_w - size[0]) // 2, 400),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
 
     if prog > 0:
         w, h = 400, 20
-        x = (model.win_w - w) // 2
+        x = (layout.win_w - w) // 2
         y = 450
         cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 50), -1)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (150, 150, 150), 2)
@@ -43,70 +37,69 @@ def draw_start(frame, model):
     # Always show controls
     draw_controls_bottom_left(frame)
 
-def draw_tiles(frame, model):
-    now = time.time()
-    for i in range(model.grid * model.grid):
-        x, y = tile_xy(i, model.grid, model.start_x, model.start_y, model.tile_size, model.spacing)
+def draw_tiles(frame, game, layout, now):
+    lit = game.highlighted_tile(now)
+    for i in range(layout.tile_count):
+        x, y = layout.tile_xy(i)
         color, border, thick = CLR_DEFAULT, CLR_BORDER, 2
 
-        if model.state.name == "SHOWING_PATTERN":
-            if model.show_idx < len(model.pattern) and i == model.pattern[model.show_idx]:
-                if now - model.last_mark < TILE_SHOW_DURATION:
-                    color, thick = CLR_HILITE, 4
+        if game.state is GameState.SHOWING_PATTERN:
+            if i == lit:
+                color, thick = CLR_HILITE, 4
 
-        elif model.state.name == "PLAYER_INPUT":
-            if i in model.player_input:
+        elif game.state is GameState.PLAYER_INPUT:
+            if i in game.player_input:
                 color, thick = CLR_SELECTED, 3
 
-        elif model.state.name == "LEVEL_SUCCESS":
-            if i in model.pattern:
+        elif game.state is GameState.LEVEL_SUCCESS:
+            if i in game.pattern:
                 color, thick = CLR_SUCCESS, 4
 
-        elif model.state.name == "LEVEL_FAILED":
-            if i in model.pattern:
+        elif game.state is GameState.LEVEL_FAILED:
+            if i in game.pattern:
                 color, thick = CLR_FAIL, 4
-            elif i in model.player_input:
+            elif i in game.player_input:
                 color = (100, 100, 100)
 
-        cv2.rectangle(frame, (x, y), (x + model.tile_size, y + model.tile_size), color, -1)
-        cv2.rectangle(frame, (x, y), (x + model.tile_size, y + model.tile_size), border, thick)
+        cv2.rectangle(frame, (x, y), (x + layout.tile, y + layout.tile), color, -1)
+        cv2.rectangle(frame, (x, y), (x + layout.tile, y + layout.tile), border, thick)
         cv2.rectangle(frame, (x + 5, y + 5),
-                      (x + model.tile_size - 5, y + model.tile_size - 5), (255, 255, 255), 1)
+                      (x + layout.tile - 5, y + layout.tile - 5), (255, 255, 255), 1)
 
-def draw_game_ui(frame, model):
+def draw_game_ui(frame, game, layout):
     # top bar
-    draw_bg(frame, 0, 0, model.win_w, 100)
-    cv2.putText(frame, f"LEVEL {model.level}", (30, 50),
+    draw_bg(frame, 0, 0, layout.win_w, 100)
+    cv2.putText(frame, f"LEVEL {game.level}", (30, 50),
                 cv2.FONT_HERSHEY_DUPLEX, 1.5, CLR_TEXT, 3)
-    cv2.putText(frame, f"Pattern Length: {len(model.pattern)}", (30, 80),
+    cv2.putText(frame, f"Pattern Length: {len(game.pattern)}", (30, 80),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
 
     # progress
     w, h = 300, 25
-    x = model.win_w - w - 30
+    x = layout.win_w - w - 30
     y = 25
     cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 50), -1)
     cv2.rectangle(frame, (x, y), (x + w, y + h), (150, 150, 150), 2)
-    if model.state.name == "PLAYER_INPUT" and model.pattern:
-        fill = int((len(model.player_input) / len(model.pattern)) * w)
+    if game.state is GameState.PLAYER_INPUT and game.pattern:
+        fill = int((len(game.player_input) / len(game.pattern)) * w)
         cv2.rectangle(frame, (x, y), (x + fill, y + h), (0, 255, 100), -1)
-    text = f"{len(model.player_input) if model.state.name == 'PLAYER_INPUT' else 0}/{len(model.pattern)}"
+    text = f"{len(game.player_input) if game.state is GameState.PLAYER_INPUT else 0}/{len(game.pattern)}"
     sz, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
     cv2.putText(frame, text, (x + (w - sz[0]) // 2, y + 17),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, CLR_TEXT, 2)
 
     # state hint
-    state_y = model.start_y - 50
+    state_y = layout.origin_y - 50
     mapping = {
-        "SHOWING_PATTERN": ("MEMORIZE THE PATTERN", (0, 255, 255)),
-        "PLAYER_INPUT": ("PINCH TILES IN THE CORRECT ORDER", (0, 255, 0)),
-        "LEVEL_SUCCESS": ("PERFECT! LEVEL COMPLETE!", (0, 255, 0)),
-        "LEVEL_FAILED": ("WRONG PATTERN! TRY AGAIN", (0, 100, 255)),
+        GameState.SHOWING_PATTERN: ("MEMORIZE THE PATTERN", (0, 255, 255)),
+        GameState.PLAYER_INPUT: ("PINCH TILES IN THE CORRECT ORDER", (0, 255, 0)),
+        GameState.LEVEL_SUCCESS: ("PERFECT! LEVEL COMPLETE!", (0, 255, 0)),
+        GameState.LEVEL_FAILED: ("WRONG PATTERN! TRY AGAIN", (0, 100, 255)),
     }
-    if model.state.name in mapping:
-        text, color = mapping[model.state.name]
+    if game.state in mapping:
+        text, color = mapping[game.state]
         tsz, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
-        tx = (model.win_w - tsz[0]) // 2
+        tx = (layout.win_w - tsz[0]) // 2
         draw_bg(frame, tx - 15, state_y - 35, tsz[0] + 30, 45, 0.35)
         cv2.putText(frame, text, (tx, state_y),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
@@ -155,11 +148,10 @@ def draw_controls_bottom_left(frame):
                     cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
         y += sz[1] + 6
 
-def draw_cursor(frame, model, pinching):
-    c = model.cursor
-    if not c.cursor:
+def draw_cursor(frame, cursor, pinching):
+    if cursor is None:
         return
-    x, y = c.cursor
+    x, y = cursor
     if pinching:
         cv2.circle(frame, (x, y), 15, (255, 0, 255), -1)
         cv2.circle(frame, (x, y), 20, (255, 255, 255), 2)
@@ -173,21 +165,19 @@ def draw_cursor(frame, model, pinching):
         cv2.circle(frame, (x, y), 5, (0, 255, 0), 2)
         cv2.circle(frame, (x, y), 2, (255, 255, 255), -1)
 
-def show_debug_window(model):
-    """Separate debug window that mirrors current model state."""
+def show_debug_window(game, extra):
+    """Separate debug window mirroring game state plus `extra` key/value pairs."""
     lines = [
-        f"STATE: {model.state.name}",
-        f"LEVEL: {model.level}",
-        f"PATTERN: {model.pattern}",
-        f"PLAYER_INPUT: {model.player_input}",
-        f"SHOW_IDX: {model.show_idx}",
-        f"COOLDOWN: {model.pinch_cooldown:.2f}s",
-        f"LEFT_PINCH: {model.hands.left_pinching}",
-        f"RIGHT_PINCH: {model.hands.right_pinching}",
-        f"CURSOR: {model.cursor.cursor}",
-        f"ARMED_TILE: {model.armed_tile}",
-    ]
-    w, h, pad = 560, 260, 12
+        f"STATE: {game.state.name}",
+        f"LEVEL: {game.level}",
+        f"PATTERN: {game.pattern}",
+        f"PLAYER_INPUT: {game.player_input}",
+        f"SHOW_IDX: {game.show_idx}",
+        f"COOLDOWN_UNTIL: {game.cooldown_until:.2f}",
+        f"ARMED_TILE: {game.armed_tile}",
+    ] + [f"{k}: {v}" for k, v in extra.items()]
+    w, pad = 560, 12
+    h = 26 + 22 * len(lines)
     img = np.zeros((h, w, 3), dtype=np.uint8)
     y = 26
     for i, s in enumerate(lines):

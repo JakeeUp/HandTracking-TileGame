@@ -1,75 +1,128 @@
-"""Game rules and state transitions."""
-import random, time
-from .state import GameModel, GameState
-from .config import TILE_SHOW_DURATION, PATTERN_PAUSE, FEEDBACK_DURATION, PINCH_COOLDOWN_S
+"""Game rules and state transitions.
 
-def new_model(win_w, win_h, grid, tile, spacing, start_x, start_y):
-    return GameModel(
-        win_w=win_w, win_h=win_h, grid=grid, tile_size=tile, spacing=spacing,
-        start_x=start_x, start_y=start_y
-    )
+Every method that depends on time takes `now` (seconds from a monotonic
+clock) instead of reading the clock itself, so the rules can be driven
+from tests without a camera or real waiting.
+"""
+import random
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import List, Optional
 
-def generate_pattern(model: GameModel):
-    model.pattern = [random.randint(0, model.grid*model.grid - 1) for _ in range(model.level)]
-    model.player_input.clear()
-    model.show_idx = 0
-    model.state = GameState.SHOWING_PATTERN
-    model.last_mark = time.time()
+from .config import (
+    DUAL_PINCH_HOLD_S, FEEDBACK_DURATION, PATTERN_PAUSE, PINCH_COOLDOWN_S,
+    TILE_SHOW_DURATION,
+)
 
-def start_game(model: GameModel):
-    model.level = 1
-    generate_pattern(model)
 
-def restart(model: GameModel):
-    model.level = 1
-    model.state = GameState.START_SCREEN
-    model.hands.both_start_time = 0
-    model.hands.left_pinching = False
-    model.hands.right_pinching = False
-    model.cursor.was_pinching = False
-    model.armed_tile = -1
-    model.player_input.clear()
-    model.pattern.clear()
+class GameState(Enum):
+    START_SCREEN = auto()
+    SHOWING_PATTERN = auto()
+    PLAYER_INPUT = auto()
+    LEVEL_SUCCESS = auto()
+    LEVEL_FAILED = auto()
 
-def update_state(model: GameModel):
-    now = time.time()
-    if model.state == GameState.SHOWING_PATTERN:
-        if now - model.last_mark >= TILE_SHOW_DURATION + PATTERN_PAUSE:
-            model.show_idx += 1
-            model.last_mark = now
-            if model.show_idx >= len(model.pattern):
-                model.state = GameState.PLAYER_INPUT
 
-    elif model.state == GameState.PLAYER_INPUT:
-        if len(model.player_input) == len(model.pattern) and model.pattern:
-            model.state = GameState.LEVEL_SUCCESS if model.player_input == model.pattern else GameState.LEVEL_FAILED
-            model.last_mark = now
+@dataclass
+class Game:
+    tile_count: int
+    rng: random.Random = field(default_factory=random.Random)
 
-    elif model.state == GameState.LEVEL_SUCCESS:
-        if now - model.last_mark > FEEDBACK_DURATION:
-            model.level += 1
-            generate_pattern(model)
+    state: GameState = GameState.START_SCREEN
+    level: int = 1
+    pattern: List[int] = field(default_factory=list)
+    player_input: List[int] = field(default_factory=list)
+    show_idx: int = 0
+    phase_start: float = 0.0          # when the current state/pattern step began
+    armed_tile: Optional[int] = None  # tile locked in by the current pinch
+    cooldown_until: float = 0.0
+    dual_pinch_since: Optional[float] = None
 
-    elif model.state == GameState.LEVEL_FAILED:
-        if now - model.last_mark > FEEDBACK_DURATION:
-            generate_pattern(model)
+    # --- lifecycle -------------------------------------------------------
 
-    if model.pinch_cooldown > 0:
-        model.pinch_cooldown = max(0.0, model.pinch_cooldown - 1/30.0)
+    def restart(self):
+        """Back to the start screen with all transient state cleared."""
+        self.state = GameState.START_SCREEN
+        self.level = 1
+        self.pattern.clear()
+        self.player_input.clear()
+        self.show_idx = 0
+        self.armed_tile = None
+        self.cooldown_until = 0.0
+        self.dual_pinch_since = None
 
-def start_pinch(model: GameModel, tile_idx: int):
-    """Right-hand pinch begins: lock the tile under cursor (may be -1)."""
-    model.armed_tile = tile_idx
+    def start(self, now: float):
+        self.level = 1
+        self._new_pattern(now)
 
-def end_pinch(model: GameModel):
-    """Right-hand pinch ends: commit exactly one selection (the armed tile)."""
-    if model.state != GameState.PLAYER_INPUT:
-        model.armed_tile = -1
-        return
-    if model.pinch_cooldown > 0:
-        model.armed_tile = -1
-        return
-    if model.armed_tile != -1:
-        model.player_input.append(model.armed_tile)
-        model.pinch_cooldown = PINCH_COOLDOWN_S
-    model.armed_tile = -1
+    def _new_pattern(self, now: float):
+        self.pattern = [self.rng.randrange(self.tile_count) for _ in range(self.level)]
+        self.player_input.clear()
+        self.show_idx = 0
+        self.state = GameState.SHOWING_PATTERN
+        self.phase_start = now
+
+    # --- per-frame update ------------------------------------------------
+
+    def update_dual_pinch(self, both_pinching: bool, now: float):
+        """Start the game once both hands have pinched for DUAL_PINCH_HOLD_S."""
+        if not both_pinching:
+            self.dual_pinch_since = None
+            return
+        if self.dual_pinch_since is None:
+            self.dual_pinch_since = now
+        if (self.state is GameState.START_SCREEN
+                and now - self.dual_pinch_since >= DUAL_PINCH_HOLD_S):
+            self.start(now)
+
+    def dual_pinch_progress(self, now: float) -> float:
+        """0..1 progress of the dual-pinch hold on the start screen."""
+        if self.dual_pinch_since is None:
+            return 0.0
+        return min(1.0, (now - self.dual_pinch_since) / DUAL_PINCH_HOLD_S)
+
+    def update(self, now: float):
+        if self.state is GameState.SHOWING_PATTERN:
+            if now - self.phase_start >= TILE_SHOW_DURATION + PATTERN_PAUSE:
+                self.show_idx += 1
+                self.phase_start = now
+                if self.show_idx >= len(self.pattern):
+                    self.state = GameState.PLAYER_INPUT
+
+        elif self.state is GameState.PLAYER_INPUT:
+            if self.pattern and len(self.player_input) == len(self.pattern):
+                self.state = (GameState.LEVEL_SUCCESS if self.player_input == self.pattern
+                              else GameState.LEVEL_FAILED)
+                self.phase_start = now
+
+        elif self.state is GameState.LEVEL_SUCCESS:
+            if now - self.phase_start > FEEDBACK_DURATION:
+                self.level += 1
+                self._new_pattern(now)
+
+        elif self.state is GameState.LEVEL_FAILED:
+            if now - self.phase_start > FEEDBACK_DURATION:
+                self._new_pattern(now)
+
+    def highlighted_tile(self, now: float) -> Optional[int]:
+        """Tile currently lit while the pattern is being shown, if any."""
+        if (self.state is GameState.SHOWING_PATTERN
+                and self.show_idx < len(self.pattern)
+                and now - self.phase_start < TILE_SHOW_DURATION):
+            return self.pattern[self.show_idx]
+        return None
+
+    # --- input -----------------------------------------------------------
+
+    def pinch_started(self, tile: Optional[int]):
+        """Right-hand pinch begins: lock the tile under the cursor (may be None)."""
+        self.armed_tile = tile
+
+    def pinch_ended(self, now: float):
+        """Right-hand pinch ends: commit at most one selection (the armed tile)."""
+        tile, self.armed_tile = self.armed_tile, None
+        if self.state is not GameState.PLAYER_INPUT or now < self.cooldown_until:
+            return
+        if tile is not None:
+            self.player_input.append(tile)
+            self.cooldown_until = now + PINCH_COOLDOWN_S
