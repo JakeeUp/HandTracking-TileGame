@@ -6,17 +6,28 @@ import cv2
 import numpy as np
 
 from .config import (
-    CAMERA_INDEX, GRID_SIZE, MAX_FAILED_READS, TILE_SIZE, TILE_SPACING, WINDOW_H, WINDOW_W,
+    CAMERA_INDEX,
+    GRID_SIZE,
+    MAX_FAILED_READS,
+    TILE_SIZE,
+    TILE_SPACING,
+    WINDOW_H,
+    WINDOW_W,
 )
 from .game import Game, GameState
 from .geometry import Layout
 from .gestures import Gestures
 from .hand_tracking import HandTracker
-from .scores import load_best, save_best
 from .renderer import (
-    draw_cursor, draw_game_over, draw_hud, draw_message, draw_start, draw_tiles,
+    draw_cursor,
+    draw_game_over,
+    draw_hud,
+    draw_message,
+    draw_start,
+    draw_tiles,
     show_debug_window,
 )
+from .scores import load_best, save_best
 
 WINDOW = "Memory Tiles"
 DEBUG_WINDOW = "Debug"

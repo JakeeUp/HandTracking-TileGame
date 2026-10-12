@@ -29,8 +29,8 @@ def test_pinch_switch_releases_when_hand_lost():
 
 
 def test_assign_hands_uses_labels_when_distinct():
-    l, r = hand("Left", OPEN, x=900), hand("Right", OPEN, x=300)
-    assert assign_hands([r, l]) == {"Left": l, "Right": r}
+    left, right = hand("Left", OPEN, x=900), hand("Right", OPEN, x=300)
+    assert assign_hands([right, left]) == {"Left": left, "Right": right}
 
 
 def test_assign_hands_falls_back_to_position_on_duplicate_labels():

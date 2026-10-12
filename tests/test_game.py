@@ -3,8 +3,14 @@ import random
 import pytest
 
 from memory_tiles.config import (
-    DUAL_PINCH_HOLD_S, FAIL_DURATION, LIVES, MIN_TILE_SHOW_DURATION, PINCH_COOLDOWN_S,
-    READY_DURATION, SUCCESS_DURATION, TILE_SHOW_DURATION,
+    DUAL_PINCH_HOLD_S,
+    FAIL_DURATION,
+    LIVES,
+    MIN_TILE_SHOW_DURATION,
+    PINCH_COOLDOWN_S,
+    READY_DURATION,
+    SUCCESS_DURATION,
+    TILE_SHOW_DURATION,
 )
 from memory_tiles.game import Game, GameState
 
