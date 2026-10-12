@@ -5,3 +5,5 @@ mediapipe==0.10.21
 # would install two packages that both provide `cv2`.
 opencv-contrib-python==4.11.0.86
 numpy>=1.26,<2
+# Camera names for the camera picker (Windows only; falls back to numbers).
+pygrabber==0.2; sys_platform == "win32"

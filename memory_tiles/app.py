@@ -5,6 +5,7 @@ import time
 import cv2
 import numpy as np
 
+from .cameras import open_camera
 from .config import (
     CAMERA_INDEX,
     GRID_SIZE,
@@ -35,16 +36,6 @@ NO_CAMERA = ("Could not open the webcam.\n"
              "Check that it is connected, not in use by another app,\n"
              "and that this app has camera permission.")
 LOST_CAMERA = "Lost the webcam feed."
-
-
-def open_camera(index=CAMERA_INDEX):
-    """Open the webcam, preferring DirectShow on Windows (faster to start there)."""
-    if sys.platform == "win32":
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if cap.isOpened():
-            return cap
-        cap.release()
-    return cv2.VideoCapture(index)
 
 
 def fit_frame(frame, w, h):
@@ -101,7 +92,7 @@ def show_fatal(message):
 
 
 def main():
-    cap = open_camera()
+    cap = open_camera(CAMERA_INDEX)
     if not cap.isOpened():
         show_fatal(NO_CAMERA)
         return 1
