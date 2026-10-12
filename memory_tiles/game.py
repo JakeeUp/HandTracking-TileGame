@@ -42,6 +42,7 @@ class Game:
     tile_count: int
     rng: random.Random = field(default_factory=random.Random)
     best: int = 0                     # best score this session (seeded from disk by the app)
+    best_at_start: int = 0            # best before the current game, for "new best"
 
     state: GameState = GameState.START_SCREEN
     level: int = 1
@@ -74,6 +75,7 @@ class Game:
 
     def start(self, now: float):
         self.restart()
+        self.best_at_start = self.best
         self._extend_pattern()
         self._begin_round(now)
 
@@ -157,6 +159,11 @@ class Game:
                 and now - self.phase_start < self.tile_show_duration):
             return self.pattern[self.show_idx]
         return None
+
+    @property
+    def new_best(self) -> bool:
+        """True if this game beat (not just tied) the previous best."""
+        return self.score > self.best_at_start
 
     @property
     def first_mistake(self) -> Optional[int]:

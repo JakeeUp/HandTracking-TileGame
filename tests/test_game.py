@@ -170,8 +170,12 @@ def test_score_and_best_track_cleared_length(game):
     now = clear_level(game, 0.0)
     now = clear_level(game, now)
     assert game.score == 2 and game.best == 2
+    assert game.new_best
     game.start(now)
     assert game.score == 0 and game.best == 2
+    now = clear_level(game, now)
+    now = clear_level(game, now)
+    assert game.score == 2 and not game.new_best     # tying isn't a new best
 
 
 # --- failing -----------------------------------------------------------------

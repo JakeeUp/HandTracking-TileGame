@@ -127,7 +127,7 @@ def draw_game_over(frame, game, layout, prog):
     text_centered(frame, "GAME OVER", W // 2, int(H * 0.25), 3.0, CLR_FAIL, 4, TITLE_FONT)
     text_centered(frame, f"Score: {game.score}     Best: {game.best}",
                   W // 2, int(H * 0.38), 1.3, CLR_TEXT, 2)
-    if game.score and game.score >= game.best:
+    if game.new_best:
         text_centered(frame, "NEW BEST!", W // 2, int(H * 0.46), 1.2, CLR_ACCENT, 3)
     text_centered(frame, "PINCH WITH BOTH HANDS TO PLAY AGAIN",
                   W // 2, int(H * 0.58), 1.0, CLR_TEXT)
