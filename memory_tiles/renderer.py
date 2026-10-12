@@ -39,8 +39,8 @@ HINTS = {
 
 CONTROLS = [
     "Controls:",
-    "  Both hands pinch (hold) = Start",
-    "  Right pinch = Select tile",
+    "  Pinch and hold = Start",
+    "  Pinch a tile (either hand) = Select",
     "  C Camera | D Debug | F Fullscreen | R Restart | Q Quit",
 ]
 
@@ -98,14 +98,15 @@ def draw_message(frame, lines):
         y += line_h
 
 
-def draw_start(frame, layout, prog, left_pinching, right_pinching):
+def draw_start(frame, layout, prog, inp):
     """Title screen with live L/R pinch indicators and the hold-to-start bar."""
     W, H = layout.win_w, layout.win_h
     shade(frame, 0, 0, W, H, 0.45)
     text_centered(frame, "MEMORY TILES", W // 2, int(H * 0.22), 3.0, CLR_ACCENT, 4, TITLE_FONT)
-    text_centered(frame, "PINCH WITH BOTH HANDS AND HOLD TO START",
+    text_centered(frame, "PINCH WITH EITHER HAND AND HOLD TO START",
                   W // 2, int(H * 0.40), 1.0, CLR_TEXT)
-    draw_hand_indicators(frame, W // 2, int(H * 0.52), left_pinching, right_pinching)
+    draw_hand_indicators(frame, W // 2, int(H * 0.52),
+                         inp.hands["Left"].pinching, inp.hands["Right"].pinching)
     if prog > 0:
         bar(frame, (W - 400) // 2, int(H * 0.62), 400, 22, prog)
     draw_controls(frame)
@@ -129,7 +130,7 @@ def draw_game_over(frame, game, layout, prog):
                   W // 2, int(H * 0.38), 1.3, CLR_TEXT, 2)
     if game.new_best:
         text_centered(frame, "NEW BEST!", W // 2, int(H * 0.46), 1.2, CLR_ACCENT, 3)
-    text_centered(frame, "PINCH WITH BOTH HANDS TO PLAY AGAIN",
+    text_centered(frame, "PINCH AND HOLD TO PLAY AGAIN",
                   W // 2, int(H * 0.58), 1.0, CLR_TEXT)
     if prog > 0:
         bar(frame, (W - 400) // 2, int(H * 0.63), 400, 22, prog)
@@ -146,8 +147,8 @@ def _order_labels(seq):
     return labels
 
 
-def draw_tiles(frame, game, layout, now, hover=None):
-    """The grid, colored for the current state. `hover` is the tile under the cursor."""
+def draw_tiles(frame, game, layout, now, hover=()):
+    """The grid, colored for the current state. `hover`: tiles under a cursor."""
     state = game.state
     lit = game.highlighted_tile(now)
     flash = (game.player_input[-1] if game.player_input and game.last_pick_at is not None
@@ -172,9 +173,9 @@ def draw_tiles(frame, game, layout, now, hover=None):
         if state is GameState.SHOWING_PATTERN and i == lit:
             color, thick = CLR_HILITE, 4
         elif state is GameState.PLAYER_INPUT:
-            if i == flash or i == game.armed_tile:
+            if i == flash or i in game.armed.values():
                 color = CLR_SELECTED
-            if i == hover:
+            if i in hover:
                 border, thick = CLR_HOVER, 4
         elif state is GameState.LEVEL_SUCCESS and i in labels:
             color, thick = CLR_SUCCESS, 4
@@ -269,8 +270,7 @@ def show_debug_window(game, extra):
         f"PATTERN: {game.pattern}",
         f"PLAYER_INPUT: {game.player_input}",
         f"SHOW_IDX: {game.show_idx}",
-        f"COOLDOWN_UNTIL: {game.cooldown_until:.2f}",
-        f"ARMED_TILE: {game.armed_tile}",
+        f"ARMED: {game.armed}",
     ] + [f"{k}: {v}" for k, v in extra.items()]
     w, pad = 560, 12
     img = np.zeros((26 + 22 * len(lines), w, 3), dtype=np.uint8)

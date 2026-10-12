@@ -18,7 +18,7 @@ LIVES = 3
 PINCH_ON_RATIO = 0.30
 PINCH_OFF_RATIO = 0.45
 PINCH_COOLDOWN_S = 0.3
-DUAL_PINCH_HOLD_S = 1.0
+START_HOLD_S = 1.0
 
 PICK_FLASH_S = 0.25             # how long a picked tile flashes
 

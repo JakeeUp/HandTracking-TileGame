@@ -143,7 +143,7 @@ def run(cap, tracker) -> Outcome:
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO)
     watcher = CloseWatcher(WINDOW)
-    print("Controls: Dual-pinch start | Right pinch select | "
+    print("Controls: Pinch and hold to start | Pinch tiles with either hand | "
           "C camera | D debug | F fullscreen | R restart | Q/Esc quit")
 
     while True:
@@ -162,28 +162,29 @@ def run(cap, tracker) -> Outcome:
         inp = gestures.update(tracker.process(frame))
         tracker.draw_landmarks(frame)
 
-        # Arm on press, commit on release; losing the hand cancels.
-        if inp.right_pressed and inp.cursor:
-            game.pinch_started(layout.tile_at(*inp.cursor), now)
-        elif inp.right_released:
-            game.pinch_ended(now)
-        elif inp.right_lost:
-            game.pinch_cancelled()
+        # Either hand selects: arm on press, commit on release; losing the hand cancels.
+        for hand in inp.hands.values():
+            if hand.pressed and hand.cursor:
+                game.pinch_started(hand.label, layout.tile_at(*hand.cursor), now)
+            elif hand.released:
+                game.pinch_ended(hand.label, now)
+            elif hand.lost:
+                game.pinch_cancelled(hand.label)
 
-        game.update_dual_pinch(inp.left_pinching and inp.right_pinching, now)
+        game.update_start_hold(inp.any_pinching, now)
 
         game.update(now)
 
         if game.state is GameState.START_SCREEN:
-            draw_start(frame, layout, game.dual_pinch_progress(now),
-                       inp.left_pinching, inp.right_pinching)
+            draw_start(frame, layout, game.start_hold_progress(now), inp)
         elif game.state is GameState.GAME_OVER:
-            draw_game_over(frame, game, layout, game.dual_pinch_progress(now))
+            draw_game_over(frame, game, layout, game.start_hold_progress(now))
         else:
-            hover = layout.tile_at(*inp.cursor) if inp.cursor else None
+            hover = {layout.tile_at(*h.cursor) for h in inp.visible} - {None}
             draw_tiles(frame, game, layout, now, hover)
             draw_hud(frame, game, layout, now)
-        draw_cursor(frame, inp.cursor, inp.right_pinching)
+        for hand in inp.visible:
+            draw_cursor(frame, hand.cursor, hand.pinching)
         if game.best > saved_best:
             save_best(game.best)
             saved_best = game.best
@@ -191,10 +192,10 @@ def run(cap, tracker) -> Outcome:
         cv2.imshow(WINDOW, frame)
         if show_debug:
             show_debug_window(game, {
-                "LEFT_PINCH": inp.left_pinching,
-                "RIGHT_PINCH": inp.right_pinching,
-                "CURSOR": inp.cursor,
-                "PINCH_RATIO L/R": " / ".join("-" if r is None else f"{r:.2f}" for r in inp.ratios),
+                **{f"{h.label.upper()}_HAND": (
+                    "-" if h.cursor is None else
+                    f"{h.cursor} ratio {h.ratio:.2f}{' PINCH' if h.pinching else ''}")
+                   for h in inp.hands.values()},
             })
 
         key = cv2.waitKey(1) & 0xFF

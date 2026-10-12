@@ -3,9 +3,10 @@
 Pinch state uses hysteresis (separate press/release thresholds) so a
 finger hovering near the threshold doesn't flicker, and a hand that
 vanishes mid-pinch is reported as `lost` rather than as a release, so
-the game can cancel instead of committing a stale selection.
+the game can cancel instead of committing a stale selection. Each hand is
+tracked independently and either one can select tiles.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .config import PINCH_OFF_RATIO, PINCH_ON_RATIO
@@ -47,39 +48,57 @@ def assign_hands(readings: List[HandReading]) -> Dict[str, HandReading]:
     return {r.label: r for r in readings}
 
 
+HANDS = ("Left", "Right")
+
+
+@dataclass
+class HandState:
+    """One hand's input this frame. Either hand can select tiles."""
+    label: str
+    cursor: Optional[Tuple[int, int]] = None   # None when the hand isn't visible
+    ratio: Optional[float] = None              # thumb-index / palm length, for tuning
+    pinching: bool = False
+    pressed: bool = False                      # pinch started this frame
+    released: bool = False                     # pinch ended this frame (hand visible)
+    lost: bool = False                         # hand vanished while pinching
+
+
 @dataclass
 class HandsInput:
-    left_pinching: bool = False
-    right_pinching: bool = False
-    cursor: Optional[Tuple[int, int]] = None   # right-hand cursor, if visible
-    right_pressed: bool = False                # pinch started this frame
-    right_released: bool = False               # pinch ended this frame (hand visible)
-    right_lost: bool = False                   # hand vanished while pinching
-    ratios: Tuple[Optional[float], Optional[float]] = (None, None)  # (left, right), for tuning
+    hands: Dict[str, HandState] = field(
+        default_factory=lambda: {label: HandState(label) for label in HANDS})
+
+    @property
+    def any_pinching(self) -> bool:
+        return any(h.pinching for h in self.hands.values())
+
+    @property
+    def visible(self) -> List[HandState]:
+        return [h for h in self.hands.values() if h.cursor is not None]
 
 
 class Gestures:
     def __init__(self):
-        self.left = PinchSwitch()
-        self.right = PinchSwitch()
+        self.switches = {label: PinchSwitch() for label in HANDS}
 
     def reset(self):
-        self.left.pressed = self.right.pressed = False
+        for switch in self.switches.values():
+            switch.pressed = False
 
     def update(self, readings: List[HandReading]) -> HandsInput:
-        hands = assign_hands(readings)
-        left, right = hands.get("Left"), hands.get("Right")
-
-        was_right = self.right.pressed
-        left_pinching = self.left.update(left.pinch_ratio if left else None)
-        right_pinching = self.right.update(right.pinch_ratio if right else None)
-
-        return HandsInput(
-            left_pinching=left_pinching,
-            right_pinching=right_pinching,
-            cursor=right.cursor if right else None,
-            right_pressed=right_pinching and not was_right,
-            right_released=was_right and not right_pinching and right is not None,
-            right_lost=was_right and right is None,
-            ratios=(left.pinch_ratio if left else None, right.pinch_ratio if right else None),
-        )
+        assigned = assign_hands(readings)
+        out = HandsInput()
+        for label, switch in self.switches.items():
+            reading = assigned.get(label)
+            was = switch.pressed
+            now = switch.update(reading.pinch_ratio if reading else None)
+            out.hands[label] = HandState(
+                label=label,
+                cursor=reading.cursor if reading else None,
+                ratio=reading.pinch_ratio if reading else None,
+                pinching=now,
+                pressed=now and not was,
+                released=was and not now and reading is not None,
+                lost=was and reading is None,
+            )
+        return out

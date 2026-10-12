@@ -5,6 +5,8 @@ import pytest
 from memory_tiles import renderer
 from memory_tiles.game import Game, GameState
 from memory_tiles.geometry import Layout
+from memory_tiles.gestures import Gestures
+from memory_tiles.hand_tracking import HandReading
 
 LAYOUT = Layout.centered(1200, 900, grid=4, tile=100, spacing=20)
 
@@ -17,14 +19,15 @@ def sample_game(state):
     game = Game(tile_count=LAYOUT.tile_count)
     game.start(0.0)
     game.pattern, game.player_input, game.state = [0, 5, 10, 5], [0, 6], state
-    game.armed_tile, game.last_pick_at = 3, 0.0
+    game.armed, game.last_pick_at = {"Left": 3}, 0.0
     return game
 
 
 @pytest.mark.parametrize("prog", [0.0, 0.5, 1.0])
 def test_start_screen(prog):
     frame = blank()
-    renderer.draw_start(frame, LAYOUT, prog, left_pinching=True, right_pinching=False)
+    inp = Gestures().update([HandReading("Left", 0.9, (300, 400), (300, 405), 0.1)])
+    renderer.draw_start(frame, LAYOUT, prog, inp)
     assert frame.any()
 
 
@@ -39,7 +42,7 @@ def test_game_over_screen():
 def test_game_screens(state):
     game = sample_game(state)
     frame = blank()
-    renderer.draw_tiles(frame, game, LAYOUT, 0.0, hover=7)
+    renderer.draw_tiles(frame, game, LAYOUT, 0.0, hover={7, 9})
     renderer.draw_hud(frame, game, LAYOUT, 0.0)
     renderer.draw_cursor(frame, (600, 450), pinching=True)
     renderer.draw_cursor(frame, (600, 450), pinching=False)

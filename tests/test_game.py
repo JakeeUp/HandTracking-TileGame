@@ -3,12 +3,12 @@ import random
 import pytest
 
 from memory_tiles.config import (
-    DUAL_PINCH_HOLD_S,
     FAIL_DURATION,
     LIVES,
     MIN_TILE_SHOW_DURATION,
     PINCH_COOLDOWN_S,
     READY_DURATION,
+    START_HOLD_S,
     SUCCESS_DURATION,
     TILE_SHOW_DURATION,
 )
@@ -34,9 +34,9 @@ def play_pattern(game, now):
     return now
 
 
-def tap(game, tile, now):
-    game.pinch_started(tile, now)
-    game.pinch_ended(now)
+def tap(game, tile, now, hand="Right"):
+    game.pinch_started(hand, tile, now)
+    game.pinch_ended(hand, now)
 
 
 def enter(game, tiles, now):
@@ -60,29 +60,29 @@ def clear_level(game, now):
 
 # --- starting ----------------------------------------------------------------
 
-def test_dual_pinch_requires_full_hold(game):
-    game.update_dual_pinch(True, 0.0)
-    game.update_dual_pinch(True, DUAL_PINCH_HOLD_S - 0.01)
+def test_start_hold_requires_full_hold(game):
+    game.update_start_hold(True, 0.0)
+    game.update_start_hold(True, START_HOLD_S - 0.01)
     assert game.state is GameState.START_SCREEN
-    assert 0.9 < game.dual_pinch_progress(DUAL_PINCH_HOLD_S - 0.01) < 1.0
-    game.update_dual_pinch(True, DUAL_PINCH_HOLD_S)
+    assert 0.9 < game.start_hold_progress(START_HOLD_S - 0.01) < 1.0
+    game.update_start_hold(True, START_HOLD_S)
     assert game.state is GameState.READY
 
 
-def test_dual_pinch_resets_on_release(game):
-    game.update_dual_pinch(True, 0.0)
-    game.update_dual_pinch(False, 0.5)
-    assert game.dual_pinch_progress(0.5) == 0.0
-    game.update_dual_pinch(True, 0.6)
-    game.update_dual_pinch(True, 0.6 + DUAL_PINCH_HOLD_S - 0.01)
+def test_start_hold_resets_on_release(game):
+    game.update_start_hold(True, 0.0)
+    game.update_start_hold(False, 0.5)
+    assert game.start_hold_progress(0.5) == 0.0
+    game.update_start_hold(True, 0.6)
+    game.update_start_hold(True, 0.6 + START_HOLD_S - 0.01)
     assert game.state is GameState.START_SCREEN
 
 
-def test_dual_pinch_ignored_mid_game(game):
+def test_start_hold_ignored_mid_game(game):
     game.start(0.0)
     pattern = list(game.pattern)
-    game.update_dual_pinch(True, 1.0)
-    game.update_dual_pinch(True, 1.0 + DUAL_PINCH_HOLD_S)
+    game.update_start_hold(True, 1.0)
+    game.update_start_hold(True, 1.0 + START_HOLD_S)
     assert game.state is GameState.READY and game.pattern == pattern
 
 
@@ -91,14 +91,14 @@ def test_pinch_held_through_last_failure_does_not_skip_game_over(game):
     game.lives = 1
     now = play_pattern(game, 0.0)
     tap(game, wrong_tile(game, 0), now)
-    for t in (now, now + 1.0, now + FAIL_DURATION - 0.01):   # hold both hands during feedback
-        game.update_dual_pinch(True, t)
+    for t in (now, now + 1.0, now + FAIL_DURATION - 0.01):   # hold a pinch during feedback
+        game.update_start_hold(True, t)
     now += FAIL_DURATION
     game.update(now)
-    game.update_dual_pinch(True, now)
+    game.update_start_hold(True, now)
     assert game.state is GameState.GAME_OVER
-    assert game.dual_pinch_progress(now) == 0.0
-    game.update_dual_pinch(True, now + DUAL_PINCH_HOLD_S)    # a full fresh hold restarts
+    assert game.start_hold_progress(now) == 0.0
+    game.update_start_hold(True, now + START_HOLD_S)    # a full fresh hold restarts
     assert game.state is GameState.READY
 
 
@@ -209,8 +209,8 @@ def test_losing_all_lives_is_game_over(game):
         now += FAIL_DURATION
         game.update(now)
     assert game.state is GameState.GAME_OVER
-    game.update_dual_pinch(True, now)
-    game.update_dual_pinch(True, now + DUAL_PINCH_HOLD_S)
+    game.update_start_hold(True, now)
+    game.update_start_hold(True, now + START_HOLD_S)
     assert game.state is GameState.READY and game.lives == LIVES
 
 
@@ -229,8 +229,8 @@ def test_input_ignored_during_cooldown(game):
     tap(game, 1, now)
     tap(game, 2, now + PINCH_COOLDOWN_S / 2)
     assert game.player_input == [1]
-    game.pinch_started(2, now + PINCH_COOLDOWN_S / 2)
-    assert game.armed_tile is None               # never shows as armed
+    game.pinch_started("Right", 2, now + PINCH_COOLDOWN_S / 2)
+    assert game.armed == {}               # never shows as armed
     tap(game, 2, now + PINCH_COOLDOWN_S)
     assert game.player_input == [1, 2]
 
@@ -240,36 +240,57 @@ def test_pinch_on_no_tile_commits_nothing(game):
     now = play_pattern(game, 0.0)
     tap(game, None, now)
     assert game.player_input == []
-    assert game.armed_tile is None
+    assert game.armed == {}
 
 
 def test_pinch_started_before_input_phase_is_not_committed(game):
     """The start gesture (or a pinch during the pattern) can't become an answer."""
     game.start(0.0)
-    game.pinch_started(game.pattern[0], 0.0)   # still READY
+    game.pinch_started("Right", game.pattern[0], 0.0)   # still READY
     now = play_pattern(game, 0.0)
-    game.pinch_ended(now)
+    game.pinch_ended("Right", now)
     assert game.player_input == []
 
 
 def test_cancelled_pinch_commits_nothing(game):
     game.start(0.0)
     now = play_pattern(game, 0.0)
-    game.pinch_started(4, now)
-    game.pinch_cancelled()
-    game.pinch_ended(now)
+    game.pinch_started("Right", 4, now)
+    game.pinch_cancelled("Right")
+    game.pinch_ended("Right", now)
     assert game.player_input == []
 
 
 def test_restart_clears_transient_state(game):
     game.start(0.0)
     now = play_pattern(game, 0.0)
-    game.pinch_started(5, now)
-    game.cooldown_until = now + 10
+    game.pinch_started("Right", 5, now)
+    game.cooldown_until["Right"] = now + 10
     game.best = 7
     game.restart()
     assert game.state is GameState.START_SCREEN
     assert (game.level, game.pattern, game.player_input) == (1, [], [])
     assert (game.lives, game.score, game.best) == (LIVES, 0, 7)
-    assert game.armed_tile is None
-    assert game.cooldown_until == 0.0
+    assert game.armed == {}
+    assert game.cooldown_until == {}
+
+
+def test_either_hand_can_pick(game):
+    game.start(0.0)
+    game.pattern = [1, 2]
+    now = play_pattern(game, 0.0)
+    tap(game, 1, now, hand="Left")
+    tap(game, 2, now + 0.05, hand="Right")       # other hand isn't held up by the cooldown
+    assert game.player_input == [1, 2]
+    assert game.state is GameState.LEVEL_SUCCESS
+
+
+def test_hands_arm_independently(game):
+    game.start(0.0)
+    game.pattern = [1, 2]
+    now = play_pattern(game, 0.0)
+    game.pinch_started("Left", 1, now)
+    game.pinch_started("Right", 2, now)
+    game.pinch_cancelled("Right")                # losing one hand keeps the other's pick
+    game.pinch_ended("Left", now)
+    assert game.player_input == [1]

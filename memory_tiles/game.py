@@ -11,10 +11,9 @@ from tests without a camera or real waiting.
 import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .config import (
-    DUAL_PINCH_HOLD_S,
     FAIL_DURATION,
     LIVES,
     MIN_TILE_SHOW_DURATION,
@@ -22,6 +21,7 @@ from .config import (
     PINCH_COOLDOWN_S,
     READY_DURATION,
     SHOW_SPEEDUP,
+    START_HOLD_S,
     SUCCESS_DURATION,
     TILE_SHOW_DURATION,
 )
@@ -52,10 +52,10 @@ class Game:
     player_input: List[int] = field(default_factory=list)
     show_idx: int = 0
     phase_start: float = 0.0          # when the current state/pattern step began
-    armed_tile: Optional[int] = None  # tile locked in by the current pinch
-    cooldown_until: float = 0.0
+    armed: Dict[str, int] = field(default_factory=dict)            # hand -> tile it pinched
+    cooldown_until: Dict[str, float] = field(default_factory=dict)  # per hand
     last_pick_at: Optional[float] = None
-    dual_pinch_since: Optional[float] = None
+    hold_since: Optional[float] = None  # when the current start-screen pinch hold began
 
     # --- lifecycle -------------------------------------------------------
 
@@ -68,10 +68,10 @@ class Game:
         self.pattern.clear()
         self.player_input.clear()
         self.show_idx = 0
-        self.armed_tile = None
-        self.cooldown_until = 0.0
+        self.armed.clear()
+        self.cooldown_until.clear()
         self.last_pick_at = None
-        self.dual_pinch_since = None
+        self.hold_since = None
 
     def start(self, now: float):
         self.restart()
@@ -106,24 +106,24 @@ class Game:
 
     # --- per-frame update ------------------------------------------------
 
-    def update_dual_pinch(self, both_pinching: bool, now: float):
-        """Start (or restart after game over) once both hands pinch for DUAL_PINCH_HOLD_S."""
+    def update_start_hold(self, pinching: bool, now: float):
+        """Start (or restart after game over) once a pinch is held for START_HOLD_S."""
         # Only time the hold on screens that accept it; otherwise a pinch held
         # through the final LEVEL_FAILED would skip the game-over screen.
-        if not both_pinching or self.state not in (GameState.START_SCREEN, GameState.GAME_OVER):
-            self.dual_pinch_since = None
+        if not pinching or self.state not in (GameState.START_SCREEN, GameState.GAME_OVER):
+            self.hold_since = None
             return
-        if self.dual_pinch_since is None:
-            self.dual_pinch_since = now
-        if now - self.dual_pinch_since >= DUAL_PINCH_HOLD_S:
-            self.dual_pinch_since = None
+        if self.hold_since is None:
+            self.hold_since = now
+        if now - self.hold_since >= START_HOLD_S:
+            self.hold_since = None
             self.start(now)
 
-    def dual_pinch_progress(self, now: float) -> float:
-        """0..1 progress of the dual-pinch hold."""
-        if self.dual_pinch_since is None:
+    def start_hold_progress(self, now: float) -> float:
+        """0..1 progress of the start-screen pinch hold."""
+        if self.hold_since is None:
             return 0.0
-        return min(1.0, (now - self.dual_pinch_since) / DUAL_PINCH_HOLD_S)
+        return min(1.0, (now - self.hold_since) / START_HOLD_S)
 
     def update(self, now: float):
         elapsed = now - self.phase_start
@@ -175,34 +175,40 @@ class Game:
 
     # --- input -----------------------------------------------------------
 
-    def pinch_started(self, tile: Optional[int], now: float):
-        """Right-hand pinch begins: lock the tile under the cursor (may be None).
+    def pinch_started(self, hand: str, tile: Optional[int], now: float):
+        """A hand's pinch begins: lock the tile under its cursor (may be None).
 
         Only arms during PLAYER_INPUT, so a pinch that began on the start
         screen or while the pattern was showing can't become an answer, and
-        not during the cooldown, so a tile never lights up as armed and then
-        silently fails to register on release.
+        not during that hand's cooldown, so a tile never lights up as armed
+        and then silently fails to register on release.
         """
-        accepting = self.state is GameState.PLAYER_INPUT and now >= self.cooldown_until
-        self.armed_tile = tile if accepting else None
+        accepting = (self.state is GameState.PLAYER_INPUT
+                     and now >= self.cooldown_until.get(hand, 0.0))
+        if accepting and tile is not None:
+            self.armed[hand] = tile
+        else:
+            self.armed.pop(hand, None)
 
-    def pinch_cancelled(self):
-        """The hand was lost mid-pinch: drop the armed tile without committing."""
-        self.armed_tile = None
+    def pinch_cancelled(self, hand: str):
+        """The hand was lost mid-pinch: drop its armed tile without committing."""
+        self.armed.pop(hand, None)
 
-    def pinch_ended(self, now: float):
-        """Right-hand pinch ends: commit at most one selection (the armed tile)."""
-        tile, self.armed_tile = self.armed_tile, None
+    def pinch_ended(self, hand: str, now: float):
+        """A hand's pinch ends: commit at most one selection (its armed tile)."""
+        tile = self.armed.pop(hand, None)
         if self.state is not GameState.PLAYER_INPUT or tile is None:
             return
         self.player_input.append(tile)
         self.last_pick_at = now
-        self.cooldown_until = now + PINCH_COOLDOWN_S
+        self.cooldown_until[hand] = now + PINCH_COOLDOWN_S
 
         if self.first_mistake is not None:
             self.lives -= 1
+            self.armed.clear()
             self._enter(GameState.LEVEL_FAILED, now)
         elif len(self.player_input) == len(self.pattern):
             self.score = len(self.pattern)
             self.best = max(self.best, self.score)
+            self.armed.clear()
             self._enter(GameState.LEVEL_SUCCESS, now)

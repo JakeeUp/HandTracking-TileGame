@@ -15,12 +15,12 @@ it, or skip it with `python main.py --camera 4`.
 
 ## How to play
 
-- **Start:** pinch with **both hands** and hold for a second.
-- **Select a tile:** point your right hand at it and pinch (thumb + index).
-  The tile under your cursor is outlined; the selection is made when you
-  release the pinch.
+- **Start:** pinch (thumb + index) with either hand and hold for a second.
+- **Select a tile:** point either hand at it and pinch. Each hand has its
+  own cursor, so you can alternate hands. The tile under a cursor is
+  outlined; the selection is made when you release the pinch.
 - A wrong tile costs a life and the same sequence replays. Lose all 3
-  lives and it's game over; pinch with both hands to play again.
+  lives and it's game over; pinch and hold to play again.
 - Your best score is saved to `~/.memory_tiles.json`.
 
 | Key | Action |

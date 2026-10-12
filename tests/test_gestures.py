@@ -46,23 +46,30 @@ def test_assign_hands_keeps_two_most_confident():
 
 def test_press_release_edges():
     g = Gestures()
-    assert g.update([hand("Right", PINCH)]).right_pressed
-    held = g.update([hand("Right", PINCH)])
-    assert held.right_pinching and not held.right_pressed
-    rel = g.update([hand("Right", OPEN)])
-    assert rel.right_released and not rel.right_lost
+    assert g.update([hand("Right", PINCH)]).hands["Right"].pressed
+    held = g.update([hand("Right", PINCH)]).hands["Right"]
+    assert held.pinching and not held.pressed
+    rel = g.update([hand("Right", OPEN)]).hands["Right"]
+    assert rel.released and not rel.lost
 
 
 def test_hand_lost_mid_pinch_is_not_a_release():
     g = Gestures()
     g.update([hand("Right", PINCH)])
-    lost = g.update([])
-    assert lost.right_lost and not lost.right_released
-    back = g.update([hand("Right", OPEN)])        # returns open: no stale release
-    assert not back.right_released and not back.right_pressed
+    lost = g.update([]).hands["Right"]
+    assert lost.lost and not lost.released
+    back = g.update([hand("Right", OPEN)]).hands["Right"]   # returns open: no stale release
+    assert not back.released and not back.pressed
 
 
-def test_both_hands_pinching():
-    inp = Gestures().update([hand("Left", PINCH, x=300), hand("Right", PINCH, x=900)])
-    assert inp.left_pinching and inp.right_pinching
-    assert inp.cursor == (900, 410)
+def test_hands_are_independent():
+    g = Gestures()
+    inp = g.update([hand("Left", PINCH, x=300), hand("Right", OPEN, x=900)])
+    assert inp.hands["Left"].pressed and not inp.hands["Right"].pinching
+    assert inp.any_pinching
+    assert [h.cursor for h in inp.visible] == [(300, 410), (900, 410)]
+
+
+def test_no_hands():
+    inp = Gestures().update([])
+    assert not inp.any_pinching and inp.visible == []
