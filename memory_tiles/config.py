@@ -6,7 +6,11 @@ TILE_SPACING = 20
 TILE_SHOW_DURATION = 0.8
 PATTERN_PAUSE = 0.3
 FEEDBACK_DURATION = 2.0
-PINCH_THRESHOLD = 0.05
+# Pinch = thumb-tip/index-tip distance divided by palm length (wrist to
+# middle-finger knuckle), so it doesn't depend on distance from the camera.
+# Press below ON, release above OFF; the gap between them stops jitter.
+PINCH_ON_RATIO = 0.30
+PINCH_OFF_RATIO = 0.45
 PINCH_COOLDOWN_S = 0.3
 DUAL_PINCH_HOLD_S = 1.0
 

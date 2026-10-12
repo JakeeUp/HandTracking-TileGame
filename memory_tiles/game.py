@@ -115,8 +115,16 @@ class Game:
     # --- input -----------------------------------------------------------
 
     def pinch_started(self, tile: Optional[int]):
-        """Right-hand pinch begins: lock the tile under the cursor (may be None)."""
-        self.armed_tile = tile
+        """Right-hand pinch begins: lock the tile under the cursor (may be None).
+
+        Only arms during PLAYER_INPUT, so a pinch that began on the start
+        screen or while the pattern was showing can't become an answer.
+        """
+        self.armed_tile = tile if self.state is GameState.PLAYER_INPUT else None
+
+    def pinch_cancelled(self):
+        """The hand was lost mid-pinch: drop the armed tile without committing."""
+        self.armed_tile = None
 
     def pinch_ended(self, now: float):
         """Right-hand pinch ends: commit at most one selection (the armed tile)."""

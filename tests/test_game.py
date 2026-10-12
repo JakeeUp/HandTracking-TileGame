@@ -123,3 +123,21 @@ def test_restart_clears_transient_state(game):
     assert (game.level, game.pattern, game.player_input) == (1, [], [])
     assert game.armed_tile is None
     assert game.cooldown_until == 0.0
+
+
+def test_pinch_started_before_input_phase_is_not_committed(game):
+    """The start gesture (or a pinch during the pattern) can't become an answer."""
+    game.start(0.0)
+    game.pinch_started(game.pattern[0])        # still SHOWING_PATTERN
+    now = play_pattern(game, 0.0)
+    game.pinch_ended(now)
+    assert game.player_input == []
+
+
+def test_cancelled_pinch_commits_nothing(game):
+    game.start(0.0)
+    now = play_pattern(game, 0.0)
+    game.pinch_started(4)
+    game.pinch_cancelled()
+    game.pinch_ended(now)
+    assert game.player_input == []

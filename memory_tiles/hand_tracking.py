@@ -5,10 +5,9 @@ from typing import List, Tuple
 import cv2
 import mediapipe as mp
 
-from .config import PINCH_THRESHOLD
 from .geometry import dist
 
-THUMB_TIP, INDEX_TIP = 4, 8
+WRIST, THUMB_TIP, INDEX_TIP, MIDDLE_MCP = 0, 4, 8, 9
 
 
 @dataclass
@@ -18,7 +17,7 @@ class HandReading:
     score: float               # handedness confidence
     thumb: Tuple[int, int]
     index: Tuple[int, int]
-    pinching: bool
+    pinch_ratio: float         # thumb-index distance / palm length
 
     @property
     def cursor(self) -> Tuple[int, int]:
@@ -53,11 +52,13 @@ class HandTracker:
             readings.append(self._reading(lm.landmark, cls.label, cls.score))
         return readings
 
+    def _px(self, p):
+        return int(p.x * self.win_w), int(p.y * self.win_h)
+
     def _reading(self, lm, label, score) -> HandReading:
-        thumb = (int(lm[THUMB_TIP].x * self.win_w), int(lm[THUMB_TIP].y * self.win_h))
-        index = (int(lm[INDEX_TIP].x * self.win_w), int(lm[INDEX_TIP].y * self.win_h))
-        pinching = dist(thumb, index) / self.win_w < PINCH_THRESHOLD
-        return HandReading(label, score, thumb, index, pinching)
+        thumb, index = self._px(lm[THUMB_TIP]), self._px(lm[INDEX_TIP])
+        palm = max(dist(self._px(lm[WRIST]), self._px(lm[MIDDLE_MCP])), 1.0)
+        return HandReading(label, score, thumb, index, dist(thumb, index) / palm)
 
     def draw_landmarks(self, frame):
         """Overlay the skeletons from the last processed frame."""

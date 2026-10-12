@@ -6,6 +6,7 @@ import cv2
 from .config import GRID_SIZE, TILE_SIZE, TILE_SPACING, WINDOW_H, WINDOW_W
 from .game import Game, GameState
 from .geometry import Layout
+from .gestures import Gestures
 from .hand_tracking import HandTracker
 from .renderer import draw_cursor, draw_game_ui, draw_start, draw_tiles, show_debug_window
 
@@ -18,7 +19,7 @@ def main():
     layout = Layout.centered(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
     game = Game(tile_count=layout.tile_count)
     tracker = HandTracker(WINDOW_W, WINDOW_H)
-    right_was_pinching = False
+    gestures = Gestures()
     show_debug = False
 
     cv2.namedWindow("Memory Tiles", cv2.WINDOW_GUI_NORMAL)
@@ -33,25 +34,18 @@ def main():
         frame = cv2.flip(frame, 1)
         frame = cv2.resize(frame, (WINDOW_W, WINDOW_H))
 
-        hands = tracker.process(frame)
+        inp = gestures.update(tracker.process(frame))
         tracker.draw_landmarks(frame)
 
-        left_pinching = right_pinching = False
-        cursor = None
-        for hand in hands:
-            if hand.label == "Left":
-                left_pinching = hand.pinching
-                continue
-            right_pinching = hand.pinching
-            cursor = hand.cursor
-            # Edge-detect the pinch: arm on press, commit on release.
-            if hand.pinching and not right_was_pinching:
-                game.pinch_started(layout.tile_at(*cursor))
-            elif not hand.pinching and right_was_pinching:
-                game.pinch_ended(now)
-            right_was_pinching = hand.pinching
+        # Arm on press, commit on release; losing the hand cancels.
+        if inp.right_pressed:
+            game.pinch_started(layout.tile_at(*inp.cursor))
+        elif inp.right_released:
+            game.pinch_ended(now)
+        elif inp.right_lost:
+            game.pinch_cancelled()
 
-        game.update_dual_pinch(left_pinching and right_pinching, now)
+        game.update_dual_pinch(inp.left_pinching and inp.right_pinching, now)
 
         if game.state is GameState.START_SCREEN:
             draw_start(frame, layout, game.dual_pinch_progress(now))
@@ -59,15 +53,16 @@ def main():
             game.update(now)
             draw_tiles(frame, game, layout, now)
             draw_game_ui(frame, game, layout)
-            draw_cursor(frame, cursor, right_pinching)
+            draw_cursor(frame, inp.cursor, inp.right_pinching)
 
         cv2.imshow("Memory Tiles", frame)
 
         if show_debug:
             show_debug_window(game, {
-                "LEFT_PINCH": left_pinching,
-                "RIGHT_PINCH": right_pinching,
-                "CURSOR": cursor,
+                "LEFT_PINCH": inp.left_pinching,
+                "RIGHT_PINCH": inp.right_pinching,
+                "CURSOR": inp.cursor,
+                "PINCH_RATIO L/R": " / ".join("-" if r is None else f"{r:.2f}" for r in inp.ratios),
             })
         else:
             try:
@@ -80,7 +75,7 @@ def main():
             break
         elif key == ord('r'):
             game.restart()
-            right_was_pinching = False
+            gestures.reset()
         elif key == ord('d'):
             show_debug = not show_debug
 
