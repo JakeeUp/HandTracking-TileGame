@@ -36,6 +36,20 @@ def open_camera(index: int):
     return cv2.VideoCapture(index)
 
 
+def fit_frame(frame, w, h):
+    """Center-crop `frame` to the w:h aspect ratio, then resize (no stretching)."""
+    fh, fw = frame.shape[:2]
+    if fw * h > fh * w:                 # too wide: trim the sides
+        cw = fh * w // h
+        x0 = (fw - cw) // 2
+        frame = frame[:, x0:x0 + cw]
+    elif fw * h < fh * w:               # too tall: trim top and bottom
+        ch = fw * h // w
+        y0 = (fh - ch) // 2
+        frame = frame[y0:y0 + ch, :]
+    return cv2.resize(frame, (w, h))
+
+
 def list_cameras() -> List[CameraInfo]:
     if sys.platform == "win32":
         names = _dshow_names()

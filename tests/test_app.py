@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from memory_tiles.app import fit_frame
+from memory_tiles.cameras import fit_frame
 
 
 @pytest.mark.parametrize("src", [(720, 1280), (480, 640), (1080, 1080), (900, 1200)])
@@ -30,3 +30,66 @@ def test_close_watcher(monkeypatch, readings, expected):
     monkeypatch.setattr(app.cv2, "getWindowProperty", lambda *_: next(values))
     watcher = app.CloseWatcher("w")
     assert [watcher.closed() for _ in readings] == expected
+
+
+class FakeLauncher:
+    """Stands in for the tkinter picker; returns queued choices in order."""
+    choices = []
+    errors = []
+
+    def __init__(self, saved_camera, error):
+        FakeLauncher.errors.append(error)
+
+    def run(self):
+        return FakeLauncher.choices.pop(0)
+
+
+@pytest.fixture
+def flow(monkeypatch, tmp_path):
+    import memory_tiles.app as app
+    import memory_tiles.launcher as launcher
+    from memory_tiles import settings
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(app, "load", lambda: settings.load(path))
+    monkeypatch.setattr(app, "save", lambda **kw: settings.save(path, **kw))
+    monkeypatch.setattr(launcher, "Launcher", FakeLauncher)
+    FakeLauncher.choices, FakeLauncher.errors = [], []
+    played = []
+
+    def set_outcomes(*outcomes):
+        queue = list(outcomes)
+        monkeypatch.setattr(app, "play", lambda i: played.append(i) or queue.pop(0))
+    return app, set_outcomes, played, path
+
+
+def test_closing_the_picker_exits(flow):
+    app, set_outcomes, played, _ = flow
+    FakeLauncher.choices = [None]
+    assert app.main([]) == 0 and played == []
+
+
+def test_camera_failure_returns_to_picker_with_error(flow):
+    from memory_tiles.cameras import CameraInfo
+    app, set_outcomes, played, path = flow
+    FakeLauncher.choices = [CameraInfo(0, "Black Cam"), CameraInfo(4, "OBS Virtual Camera")]
+    set_outcomes(None, app.Outcome.QUIT)            # first camera won't open
+    assert app.main([]) == 0
+    assert played == [0, 4]
+    assert FakeLauncher.errors == [None, app.NO_CAMERA]
+    assert '"camera": "OBS Virtual Camera"' in path.read_text()
+
+
+def test_c_key_reopens_picker_without_error(flow):
+    from memory_tiles.cameras import CameraInfo
+    app, set_outcomes, played, _ = flow
+    FakeLauncher.choices = [CameraInfo(1, "A"), None]
+    set_outcomes(app.Outcome.SETTINGS)
+    assert app.main([]) == 0
+    assert FakeLauncher.errors == [None, None]
+
+
+def test_camera_flag_skips_picker(flow, monkeypatch):
+    app, set_outcomes, played, _ = flow
+    set_outcomes(app.Outcome.QUIT)
+    assert app.main(["--camera", "4"]) == 0
+    assert played == [4] and FakeLauncher.errors == []

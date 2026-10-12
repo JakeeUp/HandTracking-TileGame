@@ -4,6 +4,15 @@ A Simon-style webcam memory game using OpenCV + MediaPipe hand tracking.
 Watch the tiles light up, then repeat the sequence by pinching tiles with
 your right hand. Each level adds one tile to the sequence.
 
+## Choosing a camera
+
+A settings window opens first with a dropdown of your cameras (by name on
+Windows and Linux) and a live preview. It warns if a camera only sends a
+black picture (common with virtual cameras and capture cards with no
+input) or can't be opened (usually because another app such as OBS is
+using it). Your choice is remembered. Press `C` in-game to come back to
+it, or skip it with `python main.py --camera 4`.
+
 ## How to play
 
 - **Start:** pinch with **both hands** and hold for a second.
@@ -16,6 +25,7 @@ your right hand. Each level adds one tile to the sequence.
 
 | Key | Action |
 | --- | --- |
+| `C` | Back to camera settings |
 | `D` | Toggle debug window (shows live pinch ratios) |
 | `F` | Toggle fullscreen |
 | `R` | Restart to title screen |
@@ -67,7 +77,9 @@ the Windows exe and macOS apps and attaches them to a GitHub Release.
 
 | Module | Responsibility |
 | --- | --- |
-| `memory_tiles/app.py` | Main loop: camera, window, keyboard; wires everything together |
+| `memory_tiles/app.py` | Entry point and game loop: window, keyboard; wires everything together |
+| `memory_tiles/launcher.py` | Camera settings window (tkinter) with live preview |
+| `memory_tiles/cameras.py` | Camera discovery (device names) and opening |
 | `memory_tiles/game.py` | Game rules and state machine (pure, clock injected) |
 | `memory_tiles/gestures.py` | Hand readings → pinch press/release/lost events (hysteresis) |
 | `memory_tiles/hand_tracking.py` | MediaPipe wrapper producing `HandReading`s |

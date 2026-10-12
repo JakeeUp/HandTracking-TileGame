@@ -1,13 +1,15 @@
-"""Main loop: camera capture, hand tracking, game update and rendering."""
+"""Entry point: camera settings window, then the game loop (capture, tracking,
+game update, rendering)."""
+import argparse
 import sys
 import time
+from enum import Enum, auto
 
 import cv2
 import numpy as np
 
-from .cameras import open_camera
+from .cameras import fit_frame, open_camera
 from .config import (
-    CAMERA_INDEX,
     GRID_SIZE,
     MAX_FAILED_READS,
     TILE_SIZE,
@@ -28,28 +30,19 @@ from .renderer import (
     draw_tiles,
     show_debug_window,
 )
-from .settings import load_best, save_best
+from .settings import load, load_best, save, save_best
 
 WINDOW = "Memory Tiles"
 DEBUG_WINDOW = "Debug"
-NO_CAMERA = ("Could not open the webcam.\n"
-             "Check that it is connected, not in use by another app,\n"
-             "and that this app has camera permission.")
-LOST_CAMERA = "Lost the webcam feed."
+NO_CAMERA = ("Could not open that camera. Check that it is connected, not in use "
+             "by another app, and that this app has camera permission.")
+LOST_CAMERA = "Lost the camera feed. Pick a camera and try again."
 
 
-def fit_frame(frame, w, h):
-    """Center-crop `frame` to the w:h aspect ratio, then resize (no stretching)."""
-    fh, fw = frame.shape[:2]
-    if fw * h > fh * w:                 # too wide: trim the sides
-        cw = fh * w // h
-        x0 = (fw - cw) // 2
-        frame = frame[:, x0:x0 + cw]
-    elif fw * h < fh * w:               # too tall: trim top and bottom
-        ch = fw * h // w
-        y0 = (fh - ch) // 2
-        frame = frame[y0:y0 + ch, :]
-    return cv2.resize(frame, (w, h))
+class Outcome(Enum):
+    QUIT = auto()
+    SETTINGS = auto()      # player pressed C: back to the camera picker
+    CAMERA_LOST = auto()
 
 
 class CloseWatcher:
@@ -91,27 +84,55 @@ def show_fatal(message):
     cv2.destroyAllWindows()
 
 
-def main():
-    cap = open_camera(CAMERA_INDEX)
-    if not cap.isOpened():
-        show_fatal(NO_CAMERA)
-        return 1
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(prog="memory_tiles", description="Memory Tiles")
+    parser.add_argument("--camera", type=int, metavar="INDEX",
+                        help="camera index to use; skips the camera settings window")
+    return parser.parse_args(argv)
 
+
+def main(argv=None):
+    args = parse_args(argv)
+    error = None
+    while True:
+        if args.camera is not None:
+            index = args.camera
+        else:
+            from .launcher import Launcher  # tkinter is only needed for the picker
+            cam = Launcher(load().get("camera"), error).run()
+            if cam is None:
+                return 0
+            save(camera=cam.name)
+            index = cam.index
+
+        outcome = play(index)
+        if outcome is Outcome.QUIT:
+            return 0
+        error = None if outcome is Outcome.SETTINGS else (
+            NO_CAMERA if outcome is None else LOST_CAMERA)
+        if args.camera is not None and error:
+            show_fatal(error)    # no picker to go back to
+            return 1
+
+
+def play(index):
+    """Open camera `index` and run the game. Returns an Outcome, or None if the
+    camera couldn't be opened."""
+    cap = open_camera(index)
+    if not cap.isOpened():
+        cap.release()
+        return None
     tracker = HandTracker(WINDOW_W, WINDOW_H)
     try:
-        error = run(cap, tracker)
+        return run(cap, tracker)
     finally:
         tracker.close()
         cap.release()
         cv2.destroyAllWindows()
-    if error:
-        show_fatal(error)
-        return 1
-    return 0
 
 
-def run(cap, tracker):
-    """Game loop. Returns an error message, or None when the player quits."""
+def run(cap, tracker) -> Outcome:
+    """The game loop."""
     layout = Layout.centered(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
     game = Game(tile_count=layout.tile_count, best=load_best())
     saved_best = game.best
@@ -123,14 +144,14 @@ def run(cap, tracker):
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO)
     watcher = CloseWatcher(WINDOW)
     print("Controls: Dual-pinch start | Right pinch select | "
-          "D debug | F fullscreen | R restart | Q/Esc quit")
+          "C camera | D debug | F fullscreen | R restart | Q/Esc quit")
 
     while True:
         ok, frame = cap.read()
         if not ok:
             failed_reads += 1
             if failed_reads >= MAX_FAILED_READS:
-                return LOST_CAMERA
+                return Outcome.CAMERA_LOST
             cv2.waitKey(10)
             continue
         failed_reads = 0
@@ -178,7 +199,9 @@ def run(cap, tracker):
 
         key = cv2.waitKey(1) & 0xFF
         if key in (ord('q'), 27) or watcher.closed():
-            return None
+            return Outcome.QUIT
+        elif key == ord('c'):
+            return Outcome.SETTINGS
         elif key == ord('r'):
             game.restart()
             gestures.reset()

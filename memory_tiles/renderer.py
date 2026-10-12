@@ -41,7 +41,7 @@ CONTROLS = [
     "Controls:",
     "  Both hands pinch (hold) = Start",
     "  Right pinch = Select tile",
-    "  D Debug | F Fullscreen | R Restart | Q Quit",
+    "  C Camera | D Debug | F Fullscreen | R Restart | Q Quit",
 ]
 
 
