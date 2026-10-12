@@ -1,4 +1,4 @@
-# state.py
+"""Game model dataclasses and the GameState enum."""
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Tuple

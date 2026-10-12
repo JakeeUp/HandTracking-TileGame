@@ -1,4 +1,11 @@
-# geometry.py
+"""Grid layout math: tile positions and hit-testing."""
+import math
+
+
+def dist(a, b):
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
 def grid_anchor(win_w, win_h, grid, tile, spacing):
     start_x = (win_w - (grid*tile + (grid-1)*spacing)) // 2
     start_y = (win_h - (grid*tile + (grid-1)*spacing)) // 2 + 60

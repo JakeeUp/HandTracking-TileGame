@@ -1,4 +1,4 @@
-# config.py
+"""Tunable constants: window, grid, timing, input thresholds and colors (BGR)."""
 WINDOW_W, WINDOW_H = 1200, 900
 GRID_SIZE = 4
 TILE_SIZE = 100

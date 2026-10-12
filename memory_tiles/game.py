@@ -1,7 +1,7 @@
-# game.py
+"""Game rules and state transitions."""
 import random, time
-from state import GameModel, GameState
-from config import TILE_SHOW_DURATION, PATTERN_PAUSE, FEEDBACK_DURATION, PINCH_COOLDOWN_S
+from .state import GameModel, GameState
+from .config import TILE_SHOW_DURATION, PATTERN_PAUSE, FEEDBACK_DURATION, PINCH_COOLDOWN_S
 
 def new_model(win_w, win_h, grid, tile, spacing, start_x, start_y):
     return GameModel(

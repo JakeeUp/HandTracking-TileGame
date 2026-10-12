@@ -1,13 +1,13 @@
-# renderer.py
+"""OpenCV drawing for the game screens, HUD and debug window."""
 import cv2
 import time
 import numpy as np
-from config import (
+from .config import (
     CLR_DEFAULT, CLR_BORDER, CLR_HILITE, CLR_SELECTED,
     CLR_SUCCESS, CLR_FAIL, CLR_TEXT,
     TILE_SHOW_DURATION
 )
-from geometry import tile_xy
+from .geometry import tile_xy
 
 def draw_bg(frame, x, y, w, h, alpha=0.30):
     overlay = frame.copy()

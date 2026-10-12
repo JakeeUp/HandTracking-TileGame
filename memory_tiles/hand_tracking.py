@@ -1,7 +1,7 @@
-# hand_tracking.py
+"""MediaPipe hand tracking and pinch detection."""
 import cv2, mediapipe as mp, time
-from utils import dist
-from config import PINCH_THRESHOLD, DUAL_PINCH_HOLD_S
+from .geometry import dist
+from .config import PINCH_THRESHOLD, DUAL_PINCH_HOLD_S
 
 class HandTracker:
     def __init__(self, win_w, win_h):
