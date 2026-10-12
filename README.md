@@ -73,7 +73,7 @@ the Windows exe and macOS apps and attaches them to a GitHub Release.
 | `memory_tiles/hand_tracking.py` | MediaPipe wrapper producing `HandReading`s |
 | `memory_tiles/geometry.py` | Grid layout and hit-testing |
 | `memory_tiles/renderer.py` | All OpenCV drawing |
-| `memory_tiles/scores.py` | Best-score persistence |
+| `memory_tiles/settings.py` | Saved settings: best score, chosen camera |
 | `memory_tiles/config.py` | Tunable constants |
 
 `requirements.txt` pins `mediapipe==0.10.21`, the last release with the

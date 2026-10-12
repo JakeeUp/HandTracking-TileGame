@@ -27,7 +27,7 @@ from .renderer import (
     draw_tiles,
     show_debug_window,
 )
-from .scores import load_best, save_best
+from .settings import load_best, save_best
 
 WINDOW = "Memory Tiles"
 DEBUG_WINDOW = "Debug"
