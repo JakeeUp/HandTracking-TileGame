@@ -1,8 +1,13 @@
 # Memory Tiles (Hand-Pinch)
 
+[![CI](https://github.com/JakeeUp/HandTracking-TileGame/actions/workflows/ci.yml/badge.svg)](https://github.com/JakeeUp/HandTracking-TileGame/actions/workflows/ci.yml)
+[![Download](https://img.shields.io/github/v/release/JakeeUp/HandTracking-TileGame?label=download)](https://github.com/JakeeUp/HandTracking-TileGame/releases/latest)
+
 A Simon-style webcam memory game using OpenCV + MediaPipe hand tracking.
 Watch the tiles light up, then repeat the sequence by pinching tiles with
-your right hand. Each level adds one tile to the sequence.
+either hand. Each level adds one tile to the sequence.
+
+![Gameplay: the pattern lights up, then the player pinches the tiles back in order](docs/demo.gif)
 
 ## Choosing a camera
 
