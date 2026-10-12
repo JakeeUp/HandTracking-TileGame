@@ -168,13 +168,16 @@ class Game:
 
     # --- input -----------------------------------------------------------
 
-    def pinch_started(self, tile: Optional[int]):
+    def pinch_started(self, tile: Optional[int], now: float):
         """Right-hand pinch begins: lock the tile under the cursor (may be None).
 
         Only arms during PLAYER_INPUT, so a pinch that began on the start
-        screen or while the pattern was showing can't become an answer.
+        screen or while the pattern was showing can't become an answer, and
+        not during the cooldown, so a tile never lights up as armed and then
+        silently fails to register on release.
         """
-        self.armed_tile = tile if self.state is GameState.PLAYER_INPUT else None
+        accepting = self.state is GameState.PLAYER_INPUT and now >= self.cooldown_until
+        self.armed_tile = tile if accepting else None
 
     def pinch_cancelled(self):
         """The hand was lost mid-pinch: drop the armed tile without committing."""
@@ -183,9 +186,7 @@ class Game:
     def pinch_ended(self, now: float):
         """Right-hand pinch ends: commit at most one selection (the armed tile)."""
         tile, self.armed_tile = self.armed_tile, None
-        if self.state is not GameState.PLAYER_INPUT or now < self.cooldown_until:
-            return
-        if tile is None:
+        if self.state is not GameState.PLAYER_INPUT or tile is None:
             return
         self.player_input.append(tile)
         self.last_pick_at = now

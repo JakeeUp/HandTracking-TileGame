@@ -35,7 +35,7 @@ def play_pattern(game, now):
 
 
 def tap(game, tile, now):
-    game.pinch_started(tile)
+    game.pinch_started(tile, now)
     game.pinch_ended(now)
 
 
@@ -225,6 +225,8 @@ def test_input_ignored_during_cooldown(game):
     tap(game, 1, now)
     tap(game, 2, now + PINCH_COOLDOWN_S / 2)
     assert game.player_input == [1]
+    game.pinch_started(2, now + PINCH_COOLDOWN_S / 2)
+    assert game.armed_tile is None               # never shows as armed
     tap(game, 2, now + PINCH_COOLDOWN_S)
     assert game.player_input == [1, 2]
 
@@ -240,7 +242,7 @@ def test_pinch_on_no_tile_commits_nothing(game):
 def test_pinch_started_before_input_phase_is_not_committed(game):
     """The start gesture (or a pinch during the pattern) can't become an answer."""
     game.start(0.0)
-    game.pinch_started(game.pattern[0])        # still READY
+    game.pinch_started(game.pattern[0], 0.0)   # still READY
     now = play_pattern(game, 0.0)
     game.pinch_ended(now)
     assert game.player_input == []
@@ -249,7 +251,7 @@ def test_pinch_started_before_input_phase_is_not_committed(game):
 def test_cancelled_pinch_commits_nothing(game):
     game.start(0.0)
     now = play_pattern(game, 0.0)
-    game.pinch_started(4)
+    game.pinch_started(4, now)
     game.pinch_cancelled()
     game.pinch_ended(now)
     assert game.player_input == []
@@ -258,7 +260,7 @@ def test_cancelled_pinch_commits_nothing(game):
 def test_restart_clears_transient_state(game):
     game.start(0.0)
     now = play_pattern(game, 0.0)
-    game.pinch_started(5)
+    game.pinch_started(5, now)
     game.cooldown_until = now + 10
     game.best = 7
     game.restart()

@@ -152,7 +152,7 @@ def run(cap, tracker):
 
         # Arm on press, commit on release; losing the hand cancels.
         if inp.right_pressed and inp.cursor:
-            game.pinch_started(layout.tile_at(*inp.cursor))
+            game.pinch_started(layout.tile_at(*inp.cursor), now)
         elif inp.right_released:
             game.pinch_ended(now)
         elif inp.right_lost:
