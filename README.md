@@ -1,123 +1,145 @@
-# Memory Tiles (Hand-Pinch)
+<div align="center">
+
+# Memory Tiles
+
+**A memory game you play with your hands.** Watch the tiles light up, then pinch them back in order using just your webcam.
 
 [![CI](https://github.com/JakeeUp/HandTracking-TileGame/actions/workflows/ci.yml/badge.svg)](https://github.com/JakeeUp/HandTracking-TileGame/actions/workflows/ci.yml)
 [![Download](https://img.shields.io/github/v/release/JakeeUp/HandTracking-TileGame?label=download)](https://github.com/JakeeUp/HandTracking-TileGame/releases/latest)
-
-A Simon-style webcam memory game using OpenCV + MediaPipe hand tracking.
-Watch the tiles light up, then repeat the sequence by pinching tiles with
-either hand. Each level adds one tile to the sequence.
+![Python](https://img.shields.io/badge/python-3.9%E2%80%933.12-blue)
 
 ![Gameplay: the pattern lights up, then the player pinches the tiles back in order](docs/demo.gif)
 
-## Choosing a camera
+[Download](#download) · [How to play](#how-to-play) · [How it works](#how-it-works) · [Run from source](#run-from-source)
 
-A settings window opens first with a dropdown of your cameras (by name on
-Windows and Linux) and a live preview. It warns if a camera only sends a
-black picture (common with virtual cameras and capture cards with no
-input) or can't be opened (usually because another app such as OBS is
-using it). Your choice is remembered. Press `C` in-game to come back to
-it, or skip it with `python main.py --camera 4`.
+</div>
 
-**Mirror image** (on by default) flips the camera so the screen acts like
-a mirror. Turn it off if your source is already mirrored (OBS virtual
-camera often is): the tell is that moving your hand right moves it left
-on screen. Press `M` in-game to toggle it.
+## Features
 
-## How to play
-
-- **Start:** pinch (thumb + index) with either hand and hold for a second.
-- **Select a tile:** point either hand at it and pinch. Each hand has its
-  own cursor, so you can alternate hands. The tile under a cursor is
-  outlined; the selection is made when you release the pinch.
-- A wrong tile costs a life and the same sequence replays. Lose all 3
-  lives and it's game over; pinch and hold to play again.
-- Your best score is saved to `~/.memory_tiles.json`.
-
-| Key | Action |
-| --- | --- |
-| `V` | Start / stop recording a video |
-| `C` | Back to camera settings |
-| `M` | Toggle mirror image |
-| `D` | Toggle debug window (shows live pinch ratios) |
-| `F` | Toggle fullscreen |
-| `R` | Restart to title screen |
-| `Q` / `Esc` | Quit |
+- **Play with either hand.** Each hand gets its own cursor, so you can alternate hands.
+- **Simon-style levels.** The sequence grows by one tile each round, and you get 3 lives.
+- **Works with any camera.** Pick it from a dropdown with live preview, including OBS and capture cards.
+- **Built-in recording.** Press `V` to record a clip and turn it into a GIF with one command.
+- **Remembers you.** Your best score, camera and settings are saved between sessions.
 
 ## Download
 
-Builds for Windows and macOS are attached to each
-[GitHub Release](../../releases).
+Grab the latest build from **[Releases](https://github.com/JakeeUp/HandTracking-TileGame/releases/latest)**. No install is needed.
 
-### macOS notes
-1) Download the .zip for your Mac (Apple Silicon = mac-arm, Intel = mac-intel).
-2) Unzip → you'll get `MemoryTiles.app`.
-3) First run: right-click the app → Open → Open (bypasses Gatekeeper since it's unsigned).
-4) If camera prompt doesn't appear, enable it in System Settings → Privacy & Security → Camera.
-(If macOS quarantines it, you can run: `xattr -dr com.apple.quarantine MemoryTiles.app`)
+| Platform | File |
+| --- | --- |
+| Windows | `MemoryTiles.exe` |
+| macOS (Apple Silicon) | `MemoryTiles-mac-arm.zip` |
+| macOS (Intel) | `MemoryTiles-mac-intel.zip` |
+
+<details>
+<summary>macOS first run</summary>
+
+The app is unsigned, so the first time you open it: right-click `MemoryTiles.app`, choose **Open**, then **Open** again.
+If the camera prompt doesn't show up, enable it in **System Settings → Privacy & Security → Camera**.
+If macOS says the app is damaged, run `xattr -dr com.apple.quarantine MemoryTiles.app`.
+</details>
+
+## How to play
+
+1. **Pick your camera** in the settings window and press **Start game**.
+2. **Pinch and hold** (thumb and index finger) with either hand to start.
+3. **Watch** the tiles light up.
+4. **Pinch the tiles in the same order.** A pick counts when you release the pinch.
+
+A wrong tile costs a life and the sequence replays. When you lose all 3 lives, the game is over.
+
+| Key | Action | Key | Action |
+| --- | --- | --- | --- |
+| `V` | Record video | `F` | Fullscreen |
+| `C` | Camera settings | `R` | Restart |
+| `M` | Mirror image | `D` | Debug overlay |
+| `Q` / `Esc` | Quit | | |
+
+> **Hand moving the wrong way on screen?** Your camera is probably already mirrored, as OBS often is. Press `M` or untick **Mirror image** in settings.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Webcam] --> B[MediaPipe<br/>21 hand landmarks]
+    B --> C[Gestures<br/>pinch detection]
+    C --> D[Game<br/>state machine]
+    D --> E[Renderer<br/>OpenCV + Pillow]
+    E --> F[Window]
+```
+
+Every frame, the game runs this pipeline: [MediaPipe](https://developers.google.com/mediapipe) finds your hands, the gesture layer turns finger positions into clean *press / release* events, the game updates its rules, and the renderer draws the UI over the camera feed.
+
+**Engineering highlights:**
+
+- **Pinches that don't flicker.** The thumb-to-index distance is measured relative to the size of your palm, so it works whether you're close to the camera or far away. Separate press and release thresholds (hysteresis) stop the cursor from rapidly toggling near the edge.
+- **No accidental picks.** A tile is chosen when you *release* the pinch, not when you start it. If your hand leaves the frame mid-pinch, the pick is cancelled instead of committed.
+- **Robust to tracking mistakes.** MediaPipe sometimes labels both hands "Right". The game detects this and falls back to which side of the screen each hand is on.
+- **Testable without a camera.** The game logic never reads the clock; time is passed in. That lets **120+ tests** run in CI on every push with no webcam.
+- **Smooth UI on a CPU.** Text is rendered once with a real font and cached, and shapes and glows are cached by size. A full frame draws in about 10 ms.
 
 ## Run from source
 
-Requires Python 3.9 – 3.12 (MediaPipe has no wheels for newer versions)
-and a webcam.
+Requires **Python 3.9–3.12** and a webcam.
 
 ```bash
+git clone https://github.com/JakeeUp/HandTracking-TileGame.git
+cd HandTracking-TileGame
 python -m venv .venv
-# Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
+.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python main.py          # or: python -m memory_tiles
+python main.py
 ```
 
-## Recording a demo
-
-Press `V` in-game to start and stop recording, or record from launch with
-`python main.py --record demo.mp4`. Videos save what's on screen at real
-playback speed (without the REC badge) to `Videos/MemoryTiles` (`Movies`
-on macOS) unless you pass a path.
-
-Turn a recording into a GIF for a README or post:
+<details>
+<summary>Command-line options</summary>
 
 ```bash
-python -m memory_tiles.gif demo.mp4 demo.gif --start 3 --end 12 --width 640 --fps 15
+python main.py --camera 4          # skip the settings window and use camera 4
+python main.py --record demo.mp4   # record from launch (V also toggles recording)
+
+# Turn a recording into a GIF (trim with --start/--end, in seconds)
+python -m memory_tiles.gif demo.mp4 demo.gif --start 3 --end 12
 ```
+</details>
 
-`--start`/`--end` trim the clip (seconds). Aim for 5–10 seconds to keep
-the GIF under ~10 MB.
+<details>
+<summary>Tuning</summary>
 
-## Tuning
-
-All tunables are in [`memory_tiles/config.py`](memory_tiles/config.py):
-timings, lives, grid size and colors. If pinches feel too hard or too
-easy, open the debug window (`D`), watch `PINCH_RATIO` while you pinch and
-release, and adjust `PINCH_ON_RATIO` / `PINCH_OFF_RATIO`.
+All the tunable values live in [`memory_tiles/config.py`](memory_tiles/config.py): timings, lives, grid size and colors.
+If pinching feels too hard or too easy, press `D` in-game, watch the pinch ratio while you pinch and release, and adjust `PINCH_ON_RATIO` and `PINCH_OFF_RATIO`.
+</details>
 
 ## Development
 
 ```bash
 pip install -r requirements-dev.txt
-pytest          # game rules, input, geometry and renderer smoke tests
+pytest          # run the tests
 ruff check .    # lint
 ```
 
-CI runs both on every push and pull request. Pushing a `v*` tag builds
-the Windows exe and macOS apps and attaches them to a GitHub Release.
+CI runs both on every push and pull request. To release, push a version tag (`git tag v2.1.0 && git push origin v2.1.0`). GitHub Actions then builds the Windows and macOS apps and publishes them to Releases.
 
-### Layout
+<details>
+<summary>Project layout</summary>
 
-| Module | Responsibility |
+| Module | What it does |
 | --- | --- |
-| `memory_tiles/app.py` | Entry point and game loop: window, keyboard; wires everything together |
-| `memory_tiles/launcher.py` | Camera settings window (tkinter) with live preview |
-| `memory_tiles/cameras.py` | Camera discovery (device names) and opening |
-| `memory_tiles/game.py` | Game rules and state machine (pure, clock injected) |
-| `memory_tiles/gestures.py` | Hand readings → pinch press/release/lost events (hysteresis) |
-| `memory_tiles/hand_tracking.py` | MediaPipe wrapper producing `HandReading`s |
-| `memory_tiles/geometry.py` | Grid layout and hit-testing |
-| `memory_tiles/renderer.py` | All OpenCV drawing |
-| `memory_tiles/recorder.py` | Records the rendered game to MP4 |
-| `memory_tiles/gif.py` | MP4 → GIF converter for demos |
-| `memory_tiles/text.py` | TrueType text rendering (bundled Poppins font) |
-| `memory_tiles/settings.py` | Saved settings: best score, chosen camera |
-| `memory_tiles/config.py` | Tunable constants |
+| [`app.py`](memory_tiles/app.py) | Entry point and game loop |
+| [`launcher.py`](memory_tiles/launcher.py) | Camera settings window with live preview |
+| [`cameras.py`](memory_tiles/cameras.py) | Finds cameras by name and opens them |
+| [`hand_tracking.py`](memory_tiles/hand_tracking.py) | MediaPipe wrapper: frame → hand landmarks |
+| [`gestures.py`](memory_tiles/gestures.py) | Landmarks → pinch press/release events |
+| [`game.py`](memory_tiles/game.py) | Rules and state machine (pure, no I/O) |
+| [`geometry.py`](memory_tiles/geometry.py) | Grid layout and hit-testing |
+| [`renderer.py`](memory_tiles/renderer.py) | Draws everything |
+| [`text.py`](memory_tiles/text.py) | Font rendering |
+| [`recorder.py`](memory_tiles/recorder.py) / [`gif.py`](memory_tiles/gif.py) | Video recording and GIF export |
+| [`settings.py`](memory_tiles/settings.py) | Saved settings and best score |
+| [`config.py`](memory_tiles/config.py) | Tunable constants |
+</details>
 
-`requirements.txt` pins `mediapipe==0.10.21`, the last release with the
-legacy `mp.solutions` API this project uses.
+## Built with
+
+[Python](https://www.python.org/) · [MediaPipe](https://developers.google.com/mediapipe) · [OpenCV](https://opencv.org/) · [Pillow](https://python-pillow.org/) · [Poppins font](https://fonts.google.com/specimen/Poppins) (SIL Open Font License)
