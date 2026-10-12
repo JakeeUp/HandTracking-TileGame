@@ -17,3 +17,16 @@ def test_fit_frame_crops_wide_frames_instead_of_stretching():
     frame[:, -10:] = 255
     out = fit_frame(frame, 1200, 900)
     assert not out[:, :5].any() and not out[:, -5:].any()
+
+
+@pytest.mark.parametrize("readings, expected", [
+    ([-1.0, -1.0, -1.0], [False, False, False]),   # backend doesn't support the property
+    ([1.0, 1.0, 0.0], [False, False, True]),       # shown, then closed with X
+    ([0.0, 1.0, 0.0], [False, False, True]),       # not yet shown on the first check
+])
+def test_close_watcher(monkeypatch, readings, expected):
+    import memory_tiles.app as app
+    values = iter(readings)
+    monkeypatch.setattr(app.cv2, "getWindowProperty", lambda *_: next(values))
+    watcher = app.CloseWatcher("w")
+    assert [watcher.closed() for _ in readings] == expected

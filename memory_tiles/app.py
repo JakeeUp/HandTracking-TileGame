@@ -61,11 +61,27 @@ def fit_frame(frame, w, h):
     return cv2.resize(frame, (w, h))
 
 
-def window_closed(name):
-    try:
-        return cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE) < 1
-    except cv2.error:
-        return True
+class CloseWatcher:
+    """Detects the user closing a window with its X button.
+
+    WND_PROP_VISIBLE reads 1 while shown and 0 once closed on Windows/GTK,
+    but some backends always return -1 (unsupported). Only report "closed"
+    after the window has been seen visible, so those backends don't quit
+    on the first frame; Q/Esc still work there.
+    """
+
+    def __init__(self, name):
+        self.name = name
+        self.seen_visible = False
+
+    def closed(self) -> bool:
+        try:
+            visible = cv2.getWindowProperty(self.name, cv2.WND_PROP_VISIBLE)
+        except cv2.error:
+            return self.seen_visible
+        if visible >= 1:
+            self.seen_visible = True
+        return self.seen_visible and visible < 1
 
 
 def show_fatal(message):
@@ -78,7 +94,8 @@ def show_fatal(message):
     draw_message(frame, message.splitlines() + ["", "Press any key to exit."])
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL)
     cv2.imshow(WINDOW, frame)
-    while cv2.waitKey(100) == -1 and not window_closed(WINDOW):
+    watcher = CloseWatcher(WINDOW)
+    while cv2.waitKey(100) == -1 and not watcher.closed():
         pass
     cv2.destroyAllWindows()
 
@@ -113,6 +130,7 @@ def run(cap, tracker):
     failed_reads = 0
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO)
+    watcher = CloseWatcher(WINDOW)
     print("Controls: Dual-pinch start | Right pinch select | "
           "D debug | F fullscreen | R restart | Q/Esc quit")
 
@@ -168,7 +186,7 @@ def run(cap, tracker):
             })
 
         key = cv2.waitKey(1) & 0xFF
-        if key in (ord('q'), 27) or window_closed(WINDOW):
+        if key in (ord('q'), 27) or watcher.closed():
             return None
         elif key == ord('r'):
             game.restart()
