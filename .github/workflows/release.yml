@@ -1,0 +1,87 @@
+name: Build & Release (Win + Mac)
+
+on:
+  push:
+    tags: ["v*"]      # runs on tags like v1.0.4
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  PYINSTALLER: pyinstaller==6.11.1
+  # mediapipe loads its models from package data, so it must be collected
+  # on every platform or the app fails at startup. jax is a mediapipe
+  # dependency that hand tracking never imports (excluding it saves ~65 MB);
+  # matplotlib looks unused but mediapipe's drawing_utils imports it.
+  PYI_FLAGS: >-
+    --noconfirm --windowed --name MemoryTiles --collect-all mediapipe
+    --exclude-module jax --exclude-module jaxlib
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            id: win
+          - os: macos-14        # Apple Silicon (arm64)
+            id: mac-arm
+          - os: macos-15-intel  # Intel (x86_64)
+            id: mac-intel
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt ${{ env.PYINSTALLER }}
+
+      - name: Test
+        run: pytest -q
+
+      - name: Build (Windows, single exe)
+        if: runner.os == 'Windows'
+        run: pyinstaller ${{ env.PYI_FLAGS }} --onefile main.py
+
+      # --onefile is deprecated for .app bundles, so macOS builds a onedir app.
+      # macOS kills apps that open the camera without NSCameraUsageDescription;
+      # editing Info.plist invalidates the signature, so re-sign ad hoc.
+      - name: Build (macOS, .app)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller ${{ env.PYI_FLAGS }} --onedir \
+            --osx-bundle-identifier io.github.memorytiles main.py
+          plutil -insert NSCameraUsageDescription \
+            -string "Memory Tiles uses the camera to track your hands." \
+            dist/MemoryTiles.app/Contents/Info.plist
+          codesign --force --deep --sign - dist/MemoryTiles.app
+          cd dist && ditto -c -k --keepParent MemoryTiles.app MemoryTiles-${{ matrix.id }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryTiles-${{ matrix.id }}
+          path: ${{ runner.os == 'macOS' && format('dist/MemoryTiles-{0}.zip', matrix.id) || 'dist/MemoryTiles.exe' }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release and attach files
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/MemoryTiles.exe
+            artifacts/**/MemoryTiles-*.zip
