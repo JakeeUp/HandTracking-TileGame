@@ -12,6 +12,18 @@ def draw_bg(frame, x, y, w, h, alpha=0.30):
     cv2.rectangle(overlay, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 0), -1)
     cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
+def draw_message(frame, lines):
+    """Centered block of text lines, e.g. for error screens."""
+    h, w = frame.shape[:2]
+    line_h = 44
+    y = (h - line_h * len(lines)) // 2 + line_h
+    for text in lines:
+        size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+        cv2.putText(frame, text, ((w - size[0]) // 2, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, CLR_TEXT, 2, cv2.LINE_AA)
+        y += line_h
+
+
 def draw_start(frame, layout, prog):
     """Title screen; `prog` is the 0..1 dual-pinch hold progress."""
     draw_bg(frame, 0, 0, layout.win_w, layout.win_h)

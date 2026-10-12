@@ -32,3 +32,9 @@ def test_game_screens(state):
     renderer.draw_cursor(frame, (600, 450), pinching=False)
     renderer.draw_cursor(frame, None, pinching=False)
     assert frame.any()
+
+
+def test_message_screen():
+    frame = blank()
+    renderer.draw_message(frame, ["line one", "", "line three"])
+    assert frame.any()

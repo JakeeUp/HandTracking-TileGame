@@ -1,5 +1,7 @@
 """Tunable constants: window, grid, timing, input thresholds and colors (BGR)."""
 WINDOW_W, WINDOW_H = 1200, 900
+CAMERA_INDEX = 0
+MAX_FAILED_READS = 30   # consecutive dropped frames before giving up
 GRID_SIZE = 4
 TILE_SIZE = 100
 TILE_SPACING = 20

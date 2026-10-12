@@ -60,6 +60,9 @@ class HandTracker:
         palm = max(dist(self._px(lm[WRIST]), self._px(lm[MIDDLE_MCP])), 1.0)
         return HandReading(label, score, thumb, index, dist(thumb, index) / palm)
 
+    def close(self):
+        self._hands.close()
+
     def draw_landmarks(self, frame):
         """Overlay the skeletons from the last processed frame."""
         if self._last and self._last.multi_hand_landmarks:
