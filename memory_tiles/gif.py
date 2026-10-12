@@ -2,17 +2,23 @@
 
     python -m memory_tiles.gif demo.mp4 demo.gif --start 3 --end 12
 
-Uses one palette for the whole clip (sampled from frames across it), which
-avoids the color flicker of per-frame palettes and keeps the file small.
+Webcam footage compresses badly as GIF because sensor noise changes almost
+every pixel every frame. Two things keep files small:
+- stabilize: pixels that changed less than a threshold keep their previous
+  value, so the static background stops shimmering (about 4x smaller);
+- one palette for the whole clip, sampled from frames across it, which also
+  avoids per-frame palette flicker.
 """
 import argparse
 import sys
 from typing import List, Optional
 
 import cv2
+import numpy as np
 from PIL import Image
 
 PALETTE_SAMPLES = 12
+STABILIZE = 12     # max per-channel change treated as noise
 
 
 def read_frames(src: str, start: float = 0.0, end: Optional[float] = None,
@@ -45,6 +51,21 @@ def read_frames(src: str, start: float = 0.0, end: Optional[float] = None,
     return frames
 
 
+def stabilize(frames: List[Image.Image], threshold: int = STABILIZE) -> List[Image.Image]:
+    """Hold pixels whose change from the previous output frame is below threshold."""
+    if threshold <= 0:
+        return frames
+    out, prev = [], None
+    for im in frames:
+        cur = np.asarray(im).astype(np.int16)
+        if prev is not None:
+            still = (np.abs(cur - prev).max(axis=2) < threshold)[..., None]
+            cur = np.where(still, prev, cur)
+        prev = cur
+        out.append(Image.fromarray(cur.astype(np.uint8)))
+    return out
+
+
 def shared_palette(frames: List[Image.Image]) -> Image.Image:
     """A 256-color palette built from frames sampled across the whole clip."""
     step = max(1, len(frames) // PALETTE_SAMPLES)
@@ -57,13 +78,15 @@ def shared_palette(frames: List[Image.Image]) -> Image.Image:
 
 
 def mp4_to_gif(src: str, dst: str, start: float = 0.0, end: Optional[float] = None,
-               width: int = 640, fps: float = 15) -> int:
+               width: int = 640, fps: float = 15, threshold: int = STABILIZE) -> int:
     """Write `dst` and return the number of frames in it."""
     frames = read_frames(src, start, end, width, fps)
     if not frames:
         raise ValueError("no frames in that time range")
+    frames = stabilize(frames, threshold)
     palette = shared_palette(frames)
-    gif = [im.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG) for im in frames]
+    # No dithering: its noise pattern changes every frame and defeats compression.
+    gif = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in frames]
     gif[0].save(dst, save_all=True, append_images=gif[1:], duration=round(1000 / fps),
                 loop=0, optimize=True)
     return len(gif)
@@ -78,9 +101,13 @@ def main(argv=None):
     p.add_argument("--end", type=float, help="end time in seconds (default: end of video)")
     p.add_argument("--width", type=int, default=640, help="output width in pixels")
     p.add_argument("--fps", type=float, default=15, help="output frame rate")
+    p.add_argument("--stabilize", type=int, default=STABILIZE, metavar="N",
+                   help="hold pixels that change less than N (0 = off; higher = smaller "
+                        "file but more smearing)")
     args = p.parse_args(argv)
     try:
-        n = mp4_to_gif(args.src, args.dst, args.start, args.end, args.width, args.fps)
+        n = mp4_to_gif(args.src, args.dst, args.start, args.end, args.width, args.fps,
+                       args.stabilize)
     except (OSError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 
 from memory_tiles.gif import main as gif_main
-from memory_tiles.gif import mp4_to_gif
+from memory_tiles.gif import mp4_to_gif, stabilize
 from memory_tiles.recorder import Recorder, default_path
 
 
@@ -63,3 +63,15 @@ def test_mp4_to_gif_trims_resamples_and_resizes(tmp_path):
 def test_gif_cli_reports_errors(tmp_path, capsys):
     assert gif_main([str(tmp_path / "missing.mp4"), str(tmp_path / "x.gif")]) == 1
     assert "error" in capsys.readouterr().err
+
+
+def test_stabilize_holds_small_changes_only():
+    base = np.full((4, 4, 3), 100, np.uint8)
+    noisy, moved = base.copy(), base.copy()
+    noisy[0, 0] = 105                      # sensor noise: held
+    moved[1, 1] = 200                      # real change: kept
+    out = [np.asarray(im) for im in stabilize(
+        [Image.fromarray(base), Image.fromarray(noisy), Image.fromarray(moved)], 12)]
+    assert out[1][0, 0, 0] == 100
+    assert out[2][1, 1, 0] == 200 and out[2][0, 0, 0] == 100
+    assert stabilize([Image.fromarray(noisy)], 0)[0] is not None
