@@ -106,13 +106,15 @@ class Game:
 
     def update_dual_pinch(self, both_pinching: bool, now: float):
         """Start (or restart after game over) once both hands pinch for DUAL_PINCH_HOLD_S."""
-        if not both_pinching:
+        # Only time the hold on screens that accept it; otherwise a pinch held
+        # through the final LEVEL_FAILED would skip the game-over screen.
+        if not both_pinching or self.state not in (GameState.START_SCREEN, GameState.GAME_OVER):
             self.dual_pinch_since = None
             return
         if self.dual_pinch_since is None:
             self.dual_pinch_since = now
-        if (self.state in (GameState.START_SCREEN, GameState.GAME_OVER)
-                and now - self.dual_pinch_since >= DUAL_PINCH_HOLD_S):
+        if now - self.dual_pinch_since >= DUAL_PINCH_HOLD_S:
+            self.dual_pinch_since = None
             self.start(now)
 
     def dual_pinch_progress(self, now: float) -> float:

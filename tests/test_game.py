@@ -86,6 +86,22 @@ def test_dual_pinch_ignored_mid_game(game):
     assert game.state is GameState.READY and game.pattern == pattern
 
 
+def test_pinch_held_through_last_failure_does_not_skip_game_over(game):
+    game.start(0.0)
+    game.lives = 1
+    now = play_pattern(game, 0.0)
+    tap(game, wrong_tile(game, 0), now)
+    for t in (now, now + 1.0, now + FAIL_DURATION - 0.01):   # hold both hands during feedback
+        game.update_dual_pinch(True, t)
+    now += FAIL_DURATION
+    game.update(now)
+    game.update_dual_pinch(True, now)
+    assert game.state is GameState.GAME_OVER
+    assert game.dual_pinch_progress(now) == 0.0
+    game.update_dual_pinch(True, now + DUAL_PINCH_HOLD_S)    # a full fresh hold restarts
+    assert game.state is GameState.READY
+
+
 def test_start_resets_and_gives_one_tile(game):
     game.score, game.lives = 9, 0
     game.start(0.0)
