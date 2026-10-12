@@ -21,11 +21,22 @@ PINCH_OFF_RATIO = 0.45
 PINCH_COOLDOWN_S = 0.3
 DUAL_PINCH_HOLD_S = 1.0
 
+PICK_FLASH_S = 0.25             # how long a picked tile flashes
+
 # colors (BGR)
-CLR_DEFAULT = (60, 60, 60)
+CLR_DEFAULT = (60, 60, 60)      # idle tile
 CLR_BORDER = (200, 200, 200)
-CLR_HILITE = (0, 200, 255)
-CLR_SELECTED = (255, 150, 0)
+CLR_HILITE = (0, 200, 255)      # pattern tile being shown
+CLR_HOVER = (255, 255, 0)       # outline of the tile under the cursor
+CLR_SELECTED = (255, 150, 0)    # armed / just-picked tile
 CLR_SUCCESS = (0, 255, 0)
 CLR_FAIL = (0, 0, 255)
 CLR_TEXT = (255, 255, 255)
+CLR_MUTED = (210, 210, 210)
+CLR_OUTLINE = (20, 20, 20)      # stroke behind text on bright fills
+CLR_ACCENT = (0, 255, 255)      # titles, headings
+CLR_BAR_BG = (50, 50, 50)
+CLR_BAR_BORDER = (150, 150, 150)
+CLR_BAR_FILL = (0, 255, 100)
+CLR_CURSOR = (0, 255, 0)
+CLR_PINCH = (255, 0, 255)
