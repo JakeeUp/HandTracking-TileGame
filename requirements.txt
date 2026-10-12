@@ -1,5 +1,7 @@
-opencv-python
-mediapipe
-matplotlib
-numpy
-pygame
+# Runtime dependencies. Pinned because mediapipe removed the legacy
+# `mp.solutions` API (used by hand_tracking.py) after 0.10.21.
+mediapipe==0.10.21
+# mediapipe depends on the contrib build; listing plain opencv-python as well
+# would install two packages that both provide `cv2`.
+opencv-contrib-python==4.11.0.86
+numpy>=1.26,<2
