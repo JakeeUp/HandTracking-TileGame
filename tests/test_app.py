@@ -60,7 +60,10 @@ def flow(monkeypatch, tmp_path):
 
     def set_outcomes(*outcomes):
         queue = list(outcomes)
-        monkeypatch.setattr(app, "play", lambda i, m: played.append((i, m)) or queue.pop(0))
+        def fake_play(index, mirror, record=None):
+            played.append((index, mirror))
+            return queue.pop(0)
+        monkeypatch.setattr(app, "play", fake_play)
     return app, set_outcomes, played, path
 
 

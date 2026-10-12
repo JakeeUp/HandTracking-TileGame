@@ -30,6 +30,7 @@ on screen. Press `M` in-game to toggle it.
 
 | Key | Action |
 | --- | --- |
+| `V` | Start / stop recording a video |
 | `C` | Back to camera settings |
 | `M` | Toggle mirror image |
 | `D` | Toggle debug window (shows live pinch ratios) |
@@ -61,6 +62,22 @@ pip install -r requirements.txt
 python main.py          # or: python -m memory_tiles
 ```
 
+## Recording a demo
+
+Press `V` in-game to start and stop recording, or record from launch with
+`python main.py --record demo.mp4`. Videos save what's on screen at real
+playback speed (without the REC badge) to `Videos/MemoryTiles` (`Movies`
+on macOS) unless you pass a path.
+
+Turn a recording into a GIF for a README or post:
+
+```bash
+python -m memory_tiles.gif demo.mp4 demo.gif --start 3 --end 12 --width 640 --fps 15
+```
+
+`--start`/`--end` trim the clip (seconds). Aim for 5–10 seconds to keep
+the GIF under ~10 MB.
+
 ## Tuning
 
 All tunables are in [`memory_tiles/config.py`](memory_tiles/config.py):
@@ -91,6 +108,9 @@ the Windows exe and macOS apps and attaches them to a GitHub Release.
 | `memory_tiles/hand_tracking.py` | MediaPipe wrapper producing `HandReading`s |
 | `memory_tiles/geometry.py` | Grid layout and hit-testing |
 | `memory_tiles/renderer.py` | All OpenCV drawing |
+| `memory_tiles/recorder.py` | Records the rendered game to MP4 |
+| `memory_tiles/gif.py` | MP4 → GIF converter for demos |
+| `memory_tiles/text.py` | TrueType text rendering (bundled Poppins font) |
 | `memory_tiles/settings.py` | Saved settings: best score, chosen camera |
 | `memory_tiles/config.py` | Tunable constants |
 

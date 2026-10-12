@@ -21,7 +21,8 @@ from .game import Game
 from .geometry import Layout
 from .gestures import Gestures
 from .hand_tracking import HandTracker
-from .renderer import draw_message, render, show_debug_window
+from .recorder import Recorder, default_path
+from .renderer import draw_message, draw_rec_badge, draw_toast, render, show_debug_window
 from .settings import load, load_best, save, save_best
 
 WINDOW = "Memory Tiles"
@@ -80,6 +81,9 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog="memory_tiles", description="Memory Tiles")
     parser.add_argument("--camera", type=int, metavar="INDEX",
                         help="camera index to use; skips the camera settings window")
+    parser.add_argument("--record", metavar="FILE.mp4",
+                        help="record the game to this file from the start (V toggles "
+                             "recording at any time)")
     return parser.parse_args(argv)
 
 
@@ -100,7 +104,8 @@ def main(argv=None):
             save(camera=cam.name, mirror=mirror)
             index = cam.index
 
-        outcome = play(index, mirror)
+        outcome = play(index, mirror, args.record)
+        args.record = None     # don't overwrite it if we come back from settings
         if outcome is Outcome.QUIT:
             return 0
         error = None if outcome is Outcome.SETTINGS else (
@@ -110,7 +115,7 @@ def main(argv=None):
             return 1
 
 
-def play(index, mirror=True):
+def play(index, mirror=True, record=None):
     """Open camera `index` and run the game. Returns an Outcome, or None if the
     camera couldn't be opened."""
     cap = open_camera(index)
@@ -118,17 +123,22 @@ def play(index, mirror=True):
         cap.release()
         return None
     tracker = HandTracker(WINDOW_W, WINDOW_H)
+    recorder = Recorder()
     try:
-        return run(cap, tracker, mirror)
+        return run(cap, tracker, mirror, recorder, record)
     finally:
+        saved = recorder.stop()
+        if saved:
+            print(f"Saved recording: {saved}")
         tracker.close()
         cap.release()
         cv2.destroyAllWindows()
 
 
-def run(cap, tracker, mirror=True) -> Outcome:
+def run(cap, tracker, mirror=True, recorder=None, record=None) -> Outcome:
     """The game loop. `mirror` flips the camera horizontally so the screen acts
-    like a mirror (MediaPipe's left/right labels also assume a mirrored image)."""
+    like a mirror (MediaPipe's left/right labels also assume a mirrored image).
+    `record` starts recording to that file immediately."""
     layout = Layout.centered(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
     game = Game(tile_count=layout.tile_count, best=load_best())
     saved_best = game.best
@@ -136,11 +146,26 @@ def run(cap, tracker, mirror=True) -> Outcome:
     show_debug = False
     fullscreen = False
     failed_reads = 0
+    recorder = recorder or Recorder()
+    toast, toast_until = "", 0.0
+
+    def notify(text, now, seconds=3.0):
+        nonlocal toast, toast_until
+        print(text)
+        toast, toast_until = text, now + seconds
+
+    def toggle_recording(now, path=None):
+        if recorder.active:
+            notify(f"Saved {recorder.stop()}", now, 5.0)
+        elif recorder.start(path or default_path(), (WINDOW_W, WINDOW_H), now):
+            notify("Recording... press V to stop", now)
+        else:
+            notify("Could not start recording", now)
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO)
     watcher = CloseWatcher(WINDOW)
     print("Controls: Pinch and hold to start | Pinch tiles with either hand | "
-          "C camera | M mirror | D debug | F fullscreen | R restart | Q/Esc quit")
+          "V record | C camera | M mirror | D debug | F fullscreen | R restart | Q/Esc quit")
 
     while True:
         ok, frame = cap.read()
@@ -152,6 +177,9 @@ def run(cap, tracker, mirror=True) -> Outcome:
             continue
         failed_reads = 0
         now = time.monotonic()
+        if record:
+            toggle_recording(now, record)
+            record = None
 
         if mirror:
             frame = cv2.flip(frame, 1)
@@ -171,6 +199,11 @@ def run(cap, tracker, mirror=True) -> Outcome:
         game.update_start_hold(inp.any_pinching, now)
         game.update(now)
         render(frame, game, layout, inp, now)
+        recorder.write(frame, now)    # before the overlays below, so they aren't recorded
+        if recorder.active:
+            draw_rec_badge(frame, recorder.elapsed(now))
+        if now < toast_until:
+            draw_toast(frame, toast)
 
         if game.best > saved_best:
             save_best(game.best)
@@ -190,6 +223,8 @@ def run(cap, tracker, mirror=True) -> Outcome:
             return Outcome.QUIT
         elif key == ord('c'):
             return Outcome.SETTINGS
+        elif key == ord('v'):
+            toggle_recording(now)
         elif key == ord('m'):
             mirror = not mirror
             save(mirror=mirror)

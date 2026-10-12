@@ -34,7 +34,7 @@ TILE_RADIUS = 18
 CARD_RADIUS = 18
 CARD_EDGE = (90, 78, 70)
 DARK_TEXT = (40, 30, 25)
-CONTROLS_HINT = "C camera    M mirror    D debug    F fullscreen    R restart    Q quit"
+CONTROLS_HINT = "V record    C camera    M mirror    D debug    F fullscreen    R restart    Q quit"
 
 HINTS = {
     GameState.READY: ("Get ready...", CLR_ACCENT),
@@ -454,6 +454,31 @@ def draw_cursor(frame, cursor, pinching, color=CLR_ACCENT, closeness=0.0, hold=0
         cv2.circle(frame, (x, y), 3, CLR_TEXT, -1, cv2.LINE_AA)
     if hold > 0:
         cv2.ellipse(frame, (x, y), (30, 30), -90, 0, 360 * hold, CLR_ACCENT, 5, cv2.LINE_AA)
+
+
+# --- overlays (drawn after the frame is recorded) -------------------------------
+
+def draw_rec_badge(frame, elapsed):
+    """Blinking REC badge with the recording time, top center."""
+    w = frame.shape[1]
+    label = f"REC  {int(elapsed) // 60}:{int(elapsed) % 60:02d}"
+    tw, _ = text_size(label, 18, "semibold")
+    bw, bh = tw + 52, 38
+    x, y = (w - bw) // 2, 20
+    glass_card(frame, x, y, bw, bh, bh // 2, alpha=0.8, edge=CLR_FAIL)
+    if int(elapsed * 2) % 2 == 0:
+        cv2.circle(frame, (x + 20, y + bh // 2), 7, CLR_FAIL, -1, cv2.LINE_AA)
+    draw_text(frame, label, (x + 34, y + bh // 2), 18, CLR_TEXT, "semibold", anchor="lm")
+
+
+def draw_toast(frame, message):
+    """Short status message near the bottom of the screen."""
+    h, w = frame.shape[:2]
+    tw, _ = text_size(message, 20, "semibold")
+    bw, bh = min(tw + 48, w - 40), 46
+    x, y = (w - bw) // 2, h - 110
+    glass_card(frame, x, y, bw, bh, bh // 2, alpha=0.85)
+    draw_text(frame, message, (w // 2, y + bh // 2), 20, CLR_TEXT, "semibold", anchor="mm")
 
 
 # --- debug ---------------------------------------------------------------------
