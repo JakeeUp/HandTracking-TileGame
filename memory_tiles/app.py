@@ -17,19 +17,11 @@ from .config import (
     WINDOW_H,
     WINDOW_W,
 )
-from .game import Game, GameState
+from .game import Game
 from .geometry import Layout
 from .gestures import Gestures
 from .hand_tracking import HandTracker
-from .renderer import (
-    draw_cursor,
-    draw_game_over,
-    draw_hud,
-    draw_message,
-    draw_start,
-    draw_tiles,
-    show_debug_window,
-)
+from .renderer import draw_message, render, show_debug_window
 from .settings import load, load_best, save, save_best
 
 WINDOW = "Memory Tiles"
@@ -160,7 +152,6 @@ def run(cap, tracker) -> Outcome:
         frame = fit_frame(cv2.flip(frame, 1), WINDOW_W, WINDOW_H)
 
         inp = gestures.update(tracker.process(frame))
-        tracker.draw_landmarks(frame)
 
         # Either hand selects: arm on press, commit on release; losing the hand cancels.
         for hand in inp.hands.values():
@@ -172,19 +163,9 @@ def run(cap, tracker) -> Outcome:
                 game.pinch_cancelled(hand.label)
 
         game.update_start_hold(inp.any_pinching, now)
-
         game.update(now)
+        render(frame, game, layout, inp, now)
 
-        if game.state is GameState.START_SCREEN:
-            draw_start(frame, layout, game.start_hold_progress(now), inp)
-        elif game.state is GameState.GAME_OVER:
-            draw_game_over(frame, game, layout, game.start_hold_progress(now))
-        else:
-            hover = {layout.tile_at(*h.cursor) for h in inp.visible} - {None}
-            draw_tiles(frame, game, layout, now, hover)
-            draw_hud(frame, game, layout, now)
-        for hand in inp.visible:
-            draw_cursor(frame, hand.cursor, hand.pinching)
         if game.best > saved_best:
             save_best(game.best)
             saved_best = game.best

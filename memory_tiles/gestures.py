@@ -57,6 +57,7 @@ class HandState:
     label: str
     cursor: Optional[Tuple[int, int]] = None   # None when the hand isn't visible
     ratio: Optional[float] = None              # thumb-index / palm length, for tuning
+    points: Tuple[Tuple[int, int], ...] = ()   # 21 landmarks, for drawing the skeleton
     pinching: bool = False
     pressed: bool = False                      # pinch started this frame
     released: bool = False                     # pinch ended this frame (hand visible)
@@ -96,6 +97,7 @@ class Gestures:
                 label=label,
                 cursor=reading.cursor if reading else None,
                 ratio=reading.pinch_ratio if reading else None,
+                points=reading.points if reading else (),
                 pinching=now,
                 pressed=now and not was,
                 released=was and not now and reading is not None,

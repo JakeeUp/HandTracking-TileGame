@@ -1,4 +1,4 @@
-"""Smoke tests: every screen draws onto a blank frame without raising."""
+"""Smoke tests: every screen draws onto a frame without raising."""
 import numpy as np
 import pytest
 
@@ -8,65 +8,74 @@ from memory_tiles.geometry import Layout
 from memory_tiles.gestures import Gestures
 from memory_tiles.hand_tracking import HandReading
 
-LAYOUT = Layout.centered(1200, 900, grid=4, tile=100, spacing=20)
+LAYOUT = Layout.centered(1200, 900, grid=4, tile=110, spacing=16)
 
 
-def blank():
-    return np.zeros((LAYOUT.win_h, LAYOUT.win_w, 3), dtype=np.uint8)
+def frame():
+    return np.full((LAYOUT.win_h, LAYOUT.win_w, 3), 120, dtype=np.uint8)
+
+
+def hands(*readings):
+    return Gestures().update(list(readings))
+
+
+def reading(label, x, ratio, points=True):
+    pts = tuple((x + 3 * i, 500 - 10 * i) for i in range(21)) if points else ()
+    return HandReading(label, 0.9, (x, 400), (x + 10, 405), ratio, pts)
 
 
 def sample_game(state):
     game = Game(tile_count=LAYOUT.tile_count)
     game.start(0.0)
     game.pattern, game.player_input, game.state = [0, 5, 10, 5], [0, 6], state
-    game.armed, game.last_pick_at = {"Left": 3}, 0.0
+    game.armed, game.last_pick_at, game.best = {"Left": 3}, 0.0, 4
     return game
 
 
-@pytest.mark.parametrize("prog", [0.0, 0.5, 1.0])
-def test_start_screen(prog):
-    frame = blank()
-    inp = Gestures().update([HandReading("Left", 0.9, (300, 400), (300, 405), 0.1)])
-    renderer.draw_start(frame, LAYOUT, prog, inp)
-    assert frame.any()
+@pytest.mark.parametrize("state", list(GameState))
+@pytest.mark.parametrize("now", [0.0, 0.1, 0.3, 2.0])
+def test_render_every_state(state, now):
+    f = frame()
+    inp = hands(reading("Left", 300, 0.1), reading("Right", 900, 0.8))
+    renderer.render(f, sample_game(state), LAYOUT, inp, now)
+    assert f.any()
 
 
-def test_game_over_screen():
-    frame = blank()
-    renderer.draw_game_over(frame, sample_game(GameState.GAME_OVER), LAYOUT, 0.5)
-    assert frame.any()
+def test_render_with_no_hands_and_empty_pattern():
+    game = Game(tile_count=LAYOUT.tile_count)
+    game.state = GameState.PLAYER_INPUT
+    renderer.render(frame(), game, LAYOUT, hands(), 0.0)
 
 
-@pytest.mark.parametrize("state", [s for s in GameState
-                                   if s not in (GameState.START_SCREEN, GameState.GAME_OVER)])
-def test_game_screens(state):
-    game = sample_game(state)
-    frame = blank()
-    renderer.draw_tiles(frame, game, LAYOUT, 0.0, hover={7, 9})
-    renderer.draw_hud(frame, game, LAYOUT, 0.0)
-    renderer.draw_cursor(frame, (600, 450), pinching=True)
-    renderer.draw_cursor(frame, (600, 450), pinching=False)
-    renderer.draw_cursor(frame, None, pinching=False)
-    assert frame.any()
+def test_hands_near_edges_are_clipped():
+    f = frame()
+    inp = hands(reading("Left", -40, 0.1), reading("Right", 1195, 0.35, points=False))
+    renderer.render(f, sample_game(GameState.START_SCREEN), LAYOUT, inp, 0.0)
 
 
 def test_message_screen():
-    frame = blank()
-    renderer.draw_message(frame, ["line one", "", "line three"])
-    assert frame.any()
+    f = np.zeros((LAYOUT.win_h, LAYOUT.win_w, 3), np.uint8)
+    renderer.draw_message(f, ["line one", "", "line three"])
+    assert f.any()
 
 
-def test_shade_darkens_only_the_region_and_clips():
-    frame = np.full((100, 100, 3), 200, np.uint8)
-    renderer.shade(frame, 50, 50, 500, 500, alpha=0.5)   # extends past the edge
-    assert frame[0, 0, 0] == 200
-    assert frame[99, 99, 0] == 100
+def test_fill_rounded_blends_only_inside_and_clips():
+    f = np.zeros((100, 100, 3), np.uint8)
+    renderer.fill_rounded(f, 50, 50, 500, 500, 10, (200, 200, 200), alpha=0.5)
+    assert f[0, 0, 0] == 0
+    assert 95 <= f[99, 99, 0] <= 105
+
+
+def test_tile_colors_are_distinct():
+    colors = renderer.tile_colors(16)
+    assert len(set(colors)) == 16
 
 
 def test_order_labels_show_repeats():
     assert renderer._order_labels([3, 7, 3]) == {3: "1,3", 7: "2"}
 
 
-def test_hud_text_is_ascii():
-    texts = [s for s, _ in renderer.HINTS.values()] + renderer.CONTROLS
-    assert all(s.isascii() for s in texts)
+def test_pinch_closeness_range():
+    assert renderer.pinch_closeness(None) == 0.0
+    assert renderer.pinch_closeness(5.0) == 0.0
+    assert renderer.pinch_closeness(0.0) == 1.0

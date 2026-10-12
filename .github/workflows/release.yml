@@ -17,6 +17,7 @@ env:
   PYI_FLAGS: >-
     --noconfirm --windowed --name MemoryTiles --collect-all mediapipe
     --exclude-module jax --exclude-module jaxlib
+    --add-data memory_tiles/assets:memory_tiles/assets
 
 jobs:
   build:
