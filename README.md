@@ -13,6 +13,11 @@ input) or can't be opened (usually because another app such as OBS is
 using it). Your choice is remembered. Press `C` in-game to come back to
 it, or skip it with `python main.py --camera 4`.
 
+**Mirror image** (on by default) flips the camera so the screen acts like
+a mirror. Turn it off if your source is already mirrored (OBS virtual
+camera often is): the tell is that moving your hand right moves it left
+on screen. Press `M` in-game to toggle it.
+
 ## How to play
 
 - **Start:** pinch (thumb + index) with either hand and hold for a second.
@@ -26,6 +31,7 @@ it, or skip it with `python main.py --camera 4`.
 | Key | Action |
 | --- | --- |
 | `C` | Back to camera settings |
+| `M` | Toggle mirror image |
 | `D` | Toggle debug window (shows live pinch ratios) |
 | `F` | Toggle fullscreen |
 | `R` | Restart to title screen |

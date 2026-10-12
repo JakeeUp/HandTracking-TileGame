@@ -87,17 +87,20 @@ def main(argv=None):
     args = parse_args(argv)
     error = None
     while True:
+        settings = load()
+        mirror = bool(settings.get("mirror", True))
         if args.camera is not None:
             index = args.camera
         else:
             from .launcher import Launcher  # tkinter is only needed for the picker
-            cam = Launcher(load().get("camera"), error).run()
-            if cam is None:
+            choice = Launcher(settings.get("camera"), error, mirror).run()
+            if choice is None:
                 return 0
-            save(camera=cam.name)
+            cam, mirror = choice
+            save(camera=cam.name, mirror=mirror)
             index = cam.index
 
-        outcome = play(index)
+        outcome = play(index, mirror)
         if outcome is Outcome.QUIT:
             return 0
         error = None if outcome is Outcome.SETTINGS else (
@@ -107,7 +110,7 @@ def main(argv=None):
             return 1
 
 
-def play(index):
+def play(index, mirror=True):
     """Open camera `index` and run the game. Returns an Outcome, or None if the
     camera couldn't be opened."""
     cap = open_camera(index)
@@ -116,15 +119,16 @@ def play(index):
         return None
     tracker = HandTracker(WINDOW_W, WINDOW_H)
     try:
-        return run(cap, tracker)
+        return run(cap, tracker, mirror)
     finally:
         tracker.close()
         cap.release()
         cv2.destroyAllWindows()
 
 
-def run(cap, tracker) -> Outcome:
-    """The game loop."""
+def run(cap, tracker, mirror=True) -> Outcome:
+    """The game loop. `mirror` flips the camera horizontally so the screen acts
+    like a mirror (MediaPipe's left/right labels also assume a mirrored image)."""
     layout = Layout.centered(WINDOW_W, WINDOW_H, GRID_SIZE, TILE_SIZE, TILE_SPACING)
     game = Game(tile_count=layout.tile_count, best=load_best())
     saved_best = game.best
@@ -136,7 +140,7 @@ def run(cap, tracker) -> Outcome:
     cv2.namedWindow(WINDOW, cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO)
     watcher = CloseWatcher(WINDOW)
     print("Controls: Pinch and hold to start | Pinch tiles with either hand | "
-          "C camera | D debug | F fullscreen | R restart | Q/Esc quit")
+          "C camera | M mirror | D debug | F fullscreen | R restart | Q/Esc quit")
 
     while True:
         ok, frame = cap.read()
@@ -149,7 +153,9 @@ def run(cap, tracker) -> Outcome:
         failed_reads = 0
         now = time.monotonic()
 
-        frame = fit_frame(cv2.flip(frame, 1), WINDOW_W, WINDOW_H)
+        if mirror:
+            frame = cv2.flip(frame, 1)
+        frame = fit_frame(frame, WINDOW_W, WINDOW_H)
 
         inp = gestures.update(tracker.process(frame))
 
@@ -184,6 +190,11 @@ def run(cap, tracker) -> Outcome:
             return Outcome.QUIT
         elif key == ord('c'):
             return Outcome.SETTINGS
+        elif key == ord('m'):
+            mirror = not mirror
+            save(mirror=mirror)
+            gestures.reset()     # cursors jump to the other side; drop held pinches
+            game.armed.clear()
         elif key == ord('r'):
             game.restart()
             gestures.reset()

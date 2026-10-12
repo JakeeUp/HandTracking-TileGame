@@ -34,7 +34,7 @@ TILE_RADIUS = 18
 CARD_RADIUS = 18
 CARD_EDGE = (90, 78, 70)
 DARK_TEXT = (40, 30, 25)
-CONTROLS_HINT = "C camera    D debug    F fullscreen    R restart    Q quit"
+CONTROLS_HINT = "C camera    M mirror    D debug    F fullscreen    R restart    Q quit"
 
 HINTS = {
     GameState.READY: ("Get ready...", CLR_ACCENT),

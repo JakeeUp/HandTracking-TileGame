@@ -36,9 +36,11 @@ class FakeLauncher:
     """Stands in for the tkinter picker; returns queued choices in order."""
     choices = []
     errors = []
+    mirrors = []
 
-    def __init__(self, saved_camera, error):
+    def __init__(self, saved_camera, error, mirror):
         FakeLauncher.errors.append(error)
+        FakeLauncher.mirrors.append(mirror)
 
     def run(self):
         return FakeLauncher.choices.pop(0)
@@ -53,12 +55,12 @@ def flow(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "load", lambda: settings.load(path))
     monkeypatch.setattr(app, "save", lambda **kw: settings.save(path, **kw))
     monkeypatch.setattr(launcher, "Launcher", FakeLauncher)
-    FakeLauncher.choices, FakeLauncher.errors = [], []
+    FakeLauncher.choices, FakeLauncher.errors, FakeLauncher.mirrors = [], [], []
     played = []
 
     def set_outcomes(*outcomes):
         queue = list(outcomes)
-        monkeypatch.setattr(app, "play", lambda i: played.append(i) or queue.pop(0))
+        monkeypatch.setattr(app, "play", lambda i, m: played.append((i, m)) or queue.pop(0))
     return app, set_outcomes, played, path
 
 
@@ -71,18 +73,20 @@ def test_closing_the_picker_exits(flow):
 def test_camera_failure_returns_to_picker_with_error(flow):
     from memory_tiles.cameras import CameraInfo
     app, set_outcomes, played, path = flow
-    FakeLauncher.choices = [CameraInfo(0, "Black Cam"), CameraInfo(4, "OBS Virtual Camera")]
+    FakeLauncher.choices = [(CameraInfo(0, "Black Cam"), True),
+                            (CameraInfo(4, "OBS Virtual Camera"), False)]
     set_outcomes(None, app.Outcome.QUIT)            # first camera won't open
     assert app.main([]) == 0
-    assert played == [0, 4]
+    assert played == [(0, True), (4, False)]
     assert FakeLauncher.errors == [None, app.NO_CAMERA]
-    assert '"camera": "OBS Virtual Camera"' in path.read_text()
+    saved = path.read_text()
+    assert '"camera": "OBS Virtual Camera"' in saved and '"mirror": false' in saved
 
 
 def test_c_key_reopens_picker_without_error(flow):
     from memory_tiles.cameras import CameraInfo
     app, set_outcomes, played, _ = flow
-    FakeLauncher.choices = [CameraInfo(1, "A"), None]
+    FakeLauncher.choices = [(CameraInfo(1, "A"), True), None]
     set_outcomes(app.Outcome.SETTINGS)
     assert app.main([]) == 0
     assert FakeLauncher.errors == [None, None]
@@ -92,4 +96,13 @@ def test_camera_flag_skips_picker(flow, monkeypatch):
     app, set_outcomes, played, _ = flow
     set_outcomes(app.Outcome.QUIT)
     assert app.main(["--camera", "4"]) == 0
-    assert played == [4] and FakeLauncher.errors == []
+    assert played == [(4, True)] and FakeLauncher.errors == []
+
+
+def test_mirror_setting_is_remembered(flow):
+    from memory_tiles.cameras import CameraInfo
+    app, set_outcomes, played, _ = flow
+    FakeLauncher.choices = [(CameraInfo(4, "OBS"), False), None]
+    set_outcomes(app.Outcome.SETTINGS)
+    app.main([])
+    assert FakeLauncher.mirrors == [True, False]   # default on, then the saved choice

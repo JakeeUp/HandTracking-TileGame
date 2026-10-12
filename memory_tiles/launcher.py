@@ -1,8 +1,9 @@
-"""Settings window shown before the game: choose a camera, with a live preview."""
+"""Settings window shown before the game: choose a camera and whether to mirror
+it, with a live preview."""
 import base64
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -15,11 +16,12 @@ ERROR_FG, OK_FG = "#c62828", "#555555"
 
 
 class Launcher:
-    """Run with `.run()`; returns the chosen camera, or None if the window was closed."""
+    """Run with `.run()`; returns (camera, mirror), or None if the window was closed."""
 
-    def __init__(self, saved_camera: Optional[str] = None, error: Optional[str] = None):
+    def __init__(self, saved_camera: Optional[str] = None, error: Optional[str] = None,
+                 mirror: bool = True):
         self.cameras: List[CameraInfo] = []
-        self.choice: Optional[CameraInfo] = None
+        self.choice: Optional[Tuple[CameraInfo, bool]] = None
         self.cap = None
         self.cap_index: Optional[int] = None
 
@@ -43,19 +45,26 @@ class Launcher:
         self.preview = tk.Label(body, image=self.blank, bg="black")
         self.preview.grid(row=2, column=0, columnspan=3, pady=12)
 
+        # Webcams usually need mirroring so moving your right hand moves right on
+        # screen; some sources (e.g. OBS virtual camera) are already mirrored.
+        self.mirror = tk.BooleanVar(value=mirror)
+        ttk.Checkbutton(body, variable=self.mirror,
+                        text="Mirror image (turn off if your hand moves the wrong way)").grid(
+            row=3, column=0, columnspan=3, sticky="w")
+
         self.status = ttk.Label(body, text=error or "", foreground=ERROR_FG if error else OK_FG,
                                 wraplength=PREVIEW_W)
-        self.status.grid(row=3, column=0, columnspan=3, sticky="w")
+        self.status.grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         self.start_btn = ttk.Button(body, text="Start game", command=self._start)
-        self.start_btn.grid(row=4, column=0, columnspan=3, pady=(12, 0), sticky="e")
+        self.start_btn.grid(row=5, column=0, columnspan=3, pady=(12, 0), sticky="e")
         root.bind("<Return>", lambda _e: self._start())
         root.bind("<Escape>", lambda _e: self._close())
 
         self._refresh(saved_camera, keep_status=bool(error))
         root.after(15, self._tick)
 
-    def run(self) -> Optional[CameraInfo]:
+    def run(self) -> Optional[Tuple[CameraInfo, bool]]:
         self.root.mainloop()
         return self.choice
 
@@ -107,7 +116,9 @@ class Launcher:
         if self.cap is not None:
             ok, frame = self.cap.read()
             if ok:
-                frame = fit_frame(cv2.flip(frame, 1), PREVIEW_W, PREVIEW_H)
+                if self.mirror.get():
+                    frame = cv2.flip(frame, 1)
+                frame = fit_frame(frame, PREVIEW_W, PREVIEW_H)
                 self._show(frame)
                 if frame.mean() < BLACK_LEVEL:
                     self._set_status("This camera is sending a black picture. "
@@ -131,7 +142,7 @@ class Launcher:
     def _start(self):
         if not self.cameras or self.combo.current() < 0:
             return
-        self.choice = self.cameras[self.combo.current()]
+        self.choice = (self.cameras[self.combo.current()], self.mirror.get())
         self._close()
 
     def _close(self):
